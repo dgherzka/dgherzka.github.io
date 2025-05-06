@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cubing Watch</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <style type="text/css">
+        body {
+            font-family: "Helvetica Neue", "Helvetica";
+
+            /* WIP: Use babel or whatever the equivalent is for CSS */
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+
+            -webkit-tap-highlight-color: rgba(0,0,0,0);
+        }
+        html,body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            position: absolute;
+            top: 0;
+            left: 0;
+
+            overflow: hidden;
+        }
+        body.state_stopped {
+            background-color: #EE9944;
+        }
+        body.state_waiting {
+            background-color: #E1D064;
+
+            animation-duration: var(--ready-threshold);
+            animation-name: waiting-fade;
+            animation-timing-function: linear;
+        }
+        @keyframes waiting-fade {
+            from {
+                background-color: #E1D064;
+            }
+            to {
+                background-color: #77FF66;
+            }
+        }
+        body.state_ready {
+            background-color: #77FF66;
+
+            animation-name: ready-flash;
+            animation-duration: 800ms;
+            animation-iteration-count: infinite;
+
+        }
+        @keyframes ready-flash {
+            from, 40% {
+                background-color: #77FF66;
+            }
+            20% {
+                background-color: #AAFF99;
+            }
+        }    
+        body.state_timing {
+            background-color: #7799FF;
+        }
+        #durations {
+            margin-top: 30vh;
+            text-align: center;
+        }
+        #durations .duration {
+            padding: 10px 0;
+        }
+        #nux {
+            min-width: 100pt;
+            max-width: 400pt;
+            margin: 20vh auto;
+            padding: 20pt;
+            text-align: center;
+        }
+        .nux_title, #durations {
+            color: white;
+        }
+        .nux_title {
+            font-size: 50pt;
+        }
+
+        /* WIP: Get rid of diag stuff before publishing */
+        #diag {
+            display: none;
+        }
+    </style>
+    <script type="text/javascript">
+        // Constants
+        // WIP: naming?
+        var STATES = {
+            STOPPED : {name: 'STOPPED', class: 'state_stopped'},
+            WAITING : {name: 'WAITING', class: 'state_waiting'},
+            READY : {name: 'READY', class: 'state_ready'},
+            TIMING : {name: 'TIMING', class: 'state_timing'},
+        };
+        var READY_THRESHOLD_MS = 1000;
+        // WIP: Is there a better way to have a single source of truth for this value?
+        document.documentElement.style.setProperty(
+            '--ready-threshold',
+            `${READY_THRESHOLD_MS}ms`
+        );
+
+        var DISPLAY_DURATIONS = 4;
+        var durationHistory = [];
+
+        // State variables
+        var waitingTimerHandle;
+        var currentState;
+        var startTime;
+        var stopTime;
+        var keyIsDown; // for debouncing
+
+        // Functions
+        function setState(state) {
+            if (state == currentState)
+                return;
+
+            var finishedTiming = false;
+
+            var nuxElement = document.getElementById('nux');
+            var durationsElement = document.getElementById('durations');
+
+            var nuxText = '';
+            switch (state) {
+                case STATES.STOPPED:
+                    finishedTiming = currentState == STATES.TIMING;
+                    if (waitingTimerHandle) {
+                        clearTimeout(waitingTimerHandle);
+                        waitingTimerHandle = null;
+                    }
+                    nuxText = 'Cubing Watch';
+                    break;
+                case STATES.WAITING:
+                    waitingTimerHandle = setTimeout(() => setState(STATES.READY), READY_THRESHOLD_MS);
+
+                    nuxText = 'Hold...';
+                    break;
+                case STATES.READY:
+                    nuxText = 'Release!';
+                    break;
+                case STATES.TIMING:
+                    nuxText = '';
+                    break;
+            }
+            nuxElement.innerText = nuxText;
+
+            if (currentState) {
+                document.body.classList.remove(currentState.class);
+            }
+            document.body.classList.add(state.class);
+            currentState = state;
+
+            if (finishedTiming) {
+                var durationSeconds = (stopTime - startTime) / 1000;
+                durationHistory.push(durationSeconds);
+
+                // Display durations
+                var newDurationsElement = durationsElement.cloneNode(false);
+                durationsElement.parentNode.replaceChild(newDurationsElement, durationsElement);
+                durationsElement = newDurationsElement;
+                for (var i = 0; i < Math.min(durationHistory.length, DISPLAY_DURATIONS); i++) {
+                    var d = durationHistory[durationHistory.length - 1 - i];
+                    var durationElement = document.createElement('div');
+                    durationElement.classList.add('duration');
+                    durationElement.innerText = d.toFixed(3);
+
+                    var fontSize = 90 - 20 * i;
+                    durationElement.style.fontSize = `${fontSize}pt`;
+
+                    var fontWeight = i == 0 ? 'bold' : '';
+                    durationElement.style.fontWeight = fontWeight;
+
+                    durationsElement.appendChild(durationElement);
+                }
+            }
+
+            var firstRun = !stopTime;
+            durationsElement.hidden = state != STATES.STOPPED;
+            nuxElement.hidden = !firstRun;
+        }
+
+        // WIP: hack to debounce lifting finger from touch screen
+        var DEBOUNCE_TIME_MS = 100;
+        var lastDownTime = 0;
+
+        // WIP: might be good to have a delay before entering the waiting
+        // state to allow for scrolling. If scroll happens during delay, don't
+        // consider the touch down
+        function down() {
+            diag('down');
+            var now = Date.now();
+            if (now - lastDownTime < DEBOUNCE_TIME_MS) {
+                return;
+            }
+            lastDownTime = Date.now();
+            switch (currentState) {
+                case STATES.STOPPED:
+                setState(STATES.WAITING);
+                break;
+                case STATES.TIMING:
+                stopTime = now;
+                setState(STATES.STOPPED);
+                break;
+            }
+        }
+
+        function up() {
+            diag('up');
+            switch (currentState) {
+                case STATES.READY:
+                startTime = Date.now();
+                setState(STATES.TIMING);
+                break;
+                case STATES.WAITING:
+                setState(STATES.STOPPED);
+                break;
+            }
+        }
+
+        function keyDown(event) {
+            if (event.key == ' ') {
+                if (!keyIsDown) {
+                    down();
+                    keyIsDown = true;
+                }
+                event.preventDefault();
+            }
+        }
+
+        function keyUp(event) {
+            if (event.key == ' ') {
+                if (keyIsDown) {
+                    up();
+                    keyIsDown = false;
+                }
+                event.preventDefault();
+            } else if (event.keyCode == 27) { // esc
+                setState(STATES.STOPPED);
+            }
+        }
+
+        function diag(s) {
+            var el = document.getElementById('diag');
+            el.innerText = s + '\n' + el.innerText;
+        }
+
+        window.onload = () => {
+            document.addEventListener('mousedown', down);
+            document.addEventListener('mouseup', up);
+            document.addEventListener('touchstart', down);
+            document.addEventListener('touchend', up);
+            document.addEventListener('keydown', keyDown);
+            document.addEventListener('keyup', keyUp);
+
+            setState(STATES.STOPPED);
+        };
+    </script>
+</head>
+<body>
+    <div id="diag"></div>
+    <div id="nux" class="nux_title">
+        Cubing Watch
+    </div>
+    <div id="durations" class="centered_text"></div>
+</body>
+</html>
