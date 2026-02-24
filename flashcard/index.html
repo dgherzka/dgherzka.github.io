@@ -1366,12 +1366,20 @@ async function findWiktionaryAudio(word) {
     const audioMatch = deSection.match(/\{\{audio\|de\|([^|}]+)/i);
     if (audioMatch) {
       const filename = audioMatch[1].trim();
-      const audioUrl = await getCommonsUrl(filename);
-      if (audioUrl) return audioUrl;
+      // Disallow .ogg files
+      if (!filename.toLowerCase().endsWith('.ogg')) {
+        const audioUrl = await getCommonsUrl(filename);
+        if (audioUrl) return audioUrl;
+      }
     }
   } catch(e) {}
 
-  const candidates = [`De-${word}.ogg`, `De-${word[0].toUpperCase() + word.slice(1)}.ogg`, `De-${word}.wav` ];
+  // iOS workaround: Prioritize .wav files (Lingua Libre recordings) exclusively
+  const candidates = [
+    `LL-Q188 (deu)-Natschoba-${word}.wav`,
+    `LL-Q188 (deu)-Sperwir-${word}.wav`,
+    `De-${word}.wav`
+  ];
   for (const name of candidates) {
     const url = await getCommonsUrl(name);
     if (url) return url;
@@ -1665,7 +1673,8 @@ async function exportApkg() {
         try {
           const resp = await fetch(card.audioUrl);
           const blob = await resp.blob();
-          const filename = card.audioFile || `wk_audio_${mi}.ogg`;
+          // Export with .wav as a safer default if no original filename
+          const filename = card.audioFile || `wk_audio_${mi}.wav`;
           mediaJson[String(mi)]  = filename;
           mediaBlobs[String(mi)] = blob;
           audioField[card.id]    = `[sound:${filename}]`;
