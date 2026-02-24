@@ -269,7 +269,7 @@
   .audio-meta .speaker { font-size: 0.9rem; color: var(--text); }
   .audio-meta .country { font-size: 0.75rem; color: var(--muted); font-family: var(--font-mono); }
 
-  /* ── Sentence/Definition Boxes ── */
+  /* ── Sentence ── */
   .sentence-box {
     background: var(--surface2);
     border: 1px solid var(--border);
@@ -629,27 +629,13 @@
   }
   .modal p { color: var(--muted); font-size: 0.9rem; margin-bottom: 22px; line-height: 1.6; }
   .modal label {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    display: block;
     font-family: var(--font-mono);
     font-size: 0.75rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--muted);
     margin-bottom: 5px;
-  }
-  .modal label a {
-    color: var(--accent);
-    text-decoration: none;
-    text-transform: none;
-    letter-spacing: normal;
-    font-family: var(--font-serif);
-    font-size: 0.8rem;
-  }
-  .modal label a:hover {
-    text-decoration: underline;
-    text-underline-offset: 2px;
   }
   .modal input {
     width: 100%;
@@ -794,7 +780,7 @@
     <div>
       <div class="section-label">Word or Phrase</div>
       <input class="entry-input" id="entryInput" type="text"
-        placeholder="Hund · der Hund · laufen · dog …"
+        placeholder="Hund · der Hund · laufen · schnell · dog · Hund (dog) …"
         autocomplete="off" spellcheck="false"
         onkeydown="if(event.key==='Enter') searchAll()" />
       <div class="parsed-tags" id="parsedTags"></div>
@@ -807,18 +793,16 @@
 
     <hr class="divider" />
 
-    <!-- Definitions (Stacked) -->
+    <!-- Definition -->
     <div>
       <div class="section-label" style="display:flex;justify-content:space-between;">
-        <span>Dictionary Definitions</span>
-        <button class="btn btn-sm" onclick="generateDefinitions()" id="defBtn">Generate</button>
+        <span>English Definition</span>
+        <button class="btn btn-sm" onclick="generateDefinition()" id="defBtn">Generate</button>
       </div>
       <div class="sentence-box">
-        <textarea class="sentence-edit" id="definitionInput" placeholder="English definition…" style="color:var(--text);font-size:0.95rem;min-height:36px;"></textarea>
-        <textarea class="sentence-en-edit" id="definitionDEInput" placeholder="German definition…" style="color:var(--muted);font-size:0.85rem;min-height:36px;"></textarea>
+        <textarea class="sentence-edit" id="definitionInput" placeholder="English definition will appear here…" style="color:var(--muted);font-size:0.9rem;"></textarea>
       </div>
     </div>
-
     <div>
       <div class="section-label" style="display:flex;justify-content:space-between;">
         <span>Images</span>
@@ -865,7 +849,7 @@
         </div>
       </div>
       <div class="sentence-box">
-        <textarea class="sentence-edit" id="sentDE" placeholder="German sentence…"></textarea>
+        <textarea class="sentence-edit" id="sentDE" placeholder="German sentence will appear here…"></textarea>
         <textarea class="sentence-en-edit" id="sentEN" placeholder="English translation…"></textarea>
       </div>
       <div class="feedback-box" id="feedbackBox"></div>
@@ -942,10 +926,10 @@
     <h2>API Keys</h2>
     <p>Your keys are stored only in your browser's localStorage and never sent anywhere except the respective APIs.</p>
 
-    <label>Pixabay API Key <a href="https://pixabay.com/api/docs" target="_blank">Get Key ↗</a></label>
-    <input id="keyPixabay" type="text" placeholder="Enter Pixabay key..." />
+    <label>Pixabay API Key</label>
+    <input id="keyPixabay" type="text" placeholder="Get free key at pixabay.com/api/docs" />
 
-    <label>Anthropic API Key <a href="https://console.anthropic.com/settings/keys" target="_blank">Get Key ↗</a></label>
+    <label>Anthropic API Key (for sentence generation)</label>
     <input id="keyAnthropic" type="text" placeholder="sk-ant-…" />
 
     <div class="modal-footer">
@@ -974,7 +958,7 @@ function clearStorage() {
 function saveDeck() { try { localStorage.setItem('wk_deck', JSON.stringify(deck)); } catch(e) {} }
 function loadDeck() { try { const d = localStorage.getItem('wk_deck'); if (d) deck = JSON.parse(d); } catch(e) {} }
 let selectedImage = null;
-let selectedAudio = null;
+let selectedAudio = null;  // { url, filename, hasAudio }
 let audioObjects = {};
 
 // ── Keys ──
@@ -1007,6 +991,7 @@ function updateApiStatus() {
   const el = document.getElementById('api-status');
   el.innerHTML = [
     `<span class="status-dot ${k.pixabay ? 'ok' : 'missing'}"></span><span style="font-size:0.75rem;color:var(--muted);margin-right:8px;font-family:var(--font-mono);">Images</span>`,
+    `<span class="status-dot ok"></span><span style="font-size:0.75rem;color:var(--muted);margin-right:8px;font-family:var(--font-mono);">Audio</span>`,
     `<span class="status-dot ${k.anthropic ? 'ok' : 'missing'}"></span><span style="font-size:0.75rem;color:var(--muted);margin-right:8px;font-family:var(--font-mono);">Sentences</span>`
   ].join('');
 }
@@ -1072,6 +1057,7 @@ function updateGenderChip(inp) {
 // ── AI entry parser ──
 async function parseEntry(raw) {
   const k = getKeys();
+  // Quick fallback if no AI key
   if (!k.anthropic) {
     const parts = raw.trim().split(/\s+/);
     const maybeArticle = ['der','die','das'].includes(parts[0]?.toLowerCase()) ? parts[0].toLowerCase() : '';
@@ -1133,11 +1119,10 @@ async function searchAll() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Parsing…';
 
-  // Clear previous fetched data to avoid stuck content
+  // Clear previous fetched data to avoid stuck sentences
   document.getElementById('sentDE').value = '';
   document.getElementById('sentEN').value = '';
   document.getElementById('definitionInput').value = '';
-  document.getElementById('definitionDEInput').value = '';
   document.getElementById('feedbackBox').className = 'feedback-box';
 
   const word = await parseEntry(raw);
@@ -1150,7 +1135,7 @@ async function searchAll() {
   await Promise.all([
     searchImages(p.word || word),
     searchAudio(p.word || word),
-    generateDefinitions(p),
+    generateDefinition(p),
     generateSentence(p),
   ]);
 
@@ -1158,19 +1143,17 @@ async function searchAll() {
   btn.textContent = 'Search All';
 }
 
-async function generateDefinitions(pArg) {
+async function generateDefinition(pOrWord) {
   const k = getKeys();
   if (!k.anthropic) return;
-  const p = pArg || getParsed();
-  const word = p.word || '';
+  const p = (typeof pOrWord === 'object') ? pOrWord : getParsed();
+  const word = (typeof pOrWord === 'string') ? pOrWord : (p.word || '');
   if (!word) return;
   const article = p.gender ? p.gender + ' ' : '';
   const btn = document.getElementById('defBtn');
   if (btn) { btn.innerHTML = '<span class="spinner"></span>'; btn.disabled = true; }
-  
   try {
-    // English Dictionary Definition
-    const resEN = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1181,37 +1164,17 @@ async function generateDefinitions(pArg) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 120,
-        messages: [{ role: 'user', content: `Give a very concise English dictionary definition (1-5 words) for the German word "${article}${word}". Return ONLY the definition text. No sentences, no preamble, no word repetition (e.g. return 'fast', not 'Schnell means fast').` }]
+        messages: [{ role: 'user', content: `Give a concise English definition of the German word "${article}${word}" in 1–2 sentences. Just the definition, no preamble.` }]
       })
     });
-    const dataEN = await resEN.json();
-    const defEN = dataEN.content?.[0]?.text?.trim();
-    if (defEN) document.getElementById('definitionInput').value = defEN;
-
-    // German Definition
-    const resDE = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': k.anthropic,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 120,
-        messages: [{ role: 'user', content: `Geben Sie eine sehr kurze deutsche Definition (maximal 10 Wörter) für das Wort "${article}${word}". Nur der Text der Definition, keine Einleitung.` }]
-      })
-    });
-    const dataDE = await resDE.json();
-    const defDE = dataDE.content?.[0]?.text?.trim();
-    if (defDE) document.getElementById('definitionDEInput').value = defDE;
-
+    const data = await res.json();
+    const def = data.content?.[0]?.text?.trim();
+    if (def) document.getElementById('definitionInput').value = def;
   } catch(e) {}
   if (btn) { btn.innerHTML = 'Generate'; btn.disabled = false; }
 }
 
-// ── Pixabay ──
+// ── Pixabay (JSONP to bypass CSP) ──
 function searchImages(word) {
   const k = getKeys();
   if (!k.pixabay) { toast('Add your Pixabay key in ⚙ API Keys.', 'error'); return Promise.resolve(); }
@@ -1269,7 +1232,7 @@ function selectImage(el, fullUrl, thumbUrl) {
   updatePreview();
 }
 
-// ── Audio lookup ──
+// ── Wiktionary + Web Speech audio ──
 async function searchAudio(word) {
   const list = document.getElementById('audioList');
   const status = document.getElementById('audio-status');
@@ -1279,9 +1242,11 @@ async function searchAudio(word) {
   document.getElementById('previewAudioBtn').style.display = 'none';
 
   const audioUrl = await findWiktionaryAudio(word);
+
   list.innerHTML = '';
 
   if (audioUrl) {
+    // Real recording found
     status.textContent = 'Wiktionary';
     const filename = decodeURIComponent(audioUrl.split('/').pop()).replace(/^.*File:/, '');
     selectedAudio = { url: audioUrl, filename, hasAudio: true };
@@ -1297,6 +1262,7 @@ async function searchAudio(word) {
     list.appendChild(item);
     document.getElementById('previewAudioBtn').style.display = 'flex';
   } else {
+    // Fallback: Web Speech
     status.textContent = 'TTS fallback';
     selectedAudio = { url: null, filename: null, hasAudio: false };
 
@@ -1306,7 +1272,7 @@ async function searchAudio(word) {
       <div class="audio-play" onclick="playSelectedAudio()">▶</div>
       <div class="audio-meta">
         <div class="speaker">Web Speech (TTS)</div>
-        <div class="country" style="color:var(--accent);font-size:0.75rem;font-family:var(--font-mono);">⚠ Preview only</div>
+        <div class="country" style="color:var(--accent);font-size:0.75rem;font-family:var(--font-mono);">⚠ Preview only — card uses JS fallback</div>
       </div>`;
     list.appendChild(item);
     document.getElementById('previewAudioBtn').style.display = 'flex';
@@ -1315,10 +1281,15 @@ async function searchAudio(word) {
 }
 
 async function findWiktionaryAudio(word) {
+  // 1. Parse wikitext for German section audio filename
   try {
-    const wtRes = await fetch(`https://en.wiktionary.org/w/api.php?action=parse&page=${encodeURIComponent(word)}&prop=wikitext&format=json&origin=*`);
+    const wtRes = await fetch(
+      `https://en.wiktionary.org/w/api.php?action=parse&page=${encodeURIComponent(word)}&prop=wikitext&format=json&origin=*`
+    );
     const wtData = await wtRes.json();
     const wikitext = wtData?.parse?.wikitext?.['*'] || '';
+
+    // Find German section and extract audio filename
     const deSection = wikitext.match(/==German==([\s\S]*?)(?:^==[^=]|\Z)/m)?.[1] || wikitext;
     const audioMatch = deSection.match(/\{\{audio\|de\|([^|}]+)/i);
     if (audioMatch) {
@@ -1328,7 +1299,13 @@ async function findWiktionaryAudio(word) {
     }
   } catch(e) {}
 
-  const candidates = [`De-${word}.ogg`, `De-${word[0].toUpperCase() + word.slice(1)}.ogg`, `De-${word}.wav` ];
+  // 2. Try predictable filename patterns on Commons
+  const candidates = [
+    `De-${word}.ogg`,
+    `De-${word[0].toUpperCase() + word.slice(1)}.ogg`,
+    `De-${word}.wav`,
+    `LL-Q188 (deu)-Natschoba-${word}.wav`,
+  ];
   for (const name of candidates) {
     const url = await getCommonsUrl(name);
     if (url) return url;
@@ -1338,12 +1315,21 @@ async function findWiktionaryAudio(word) {
 
 async function getCommonsUrl(filename) {
   try {
-    const res = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&titles=File:${encodeURIComponent(filename)}&prop=imageinfo&iiprop=url&format=json&origin=*`);
+    const res = await fetch(
+      `https://commons.wikimedia.org/w/api.php?action=query&titles=File:${encodeURIComponent(filename)}&prop=imageinfo&iiprop=url&format=json&origin=*`
+    );
     const data = await res.json();
-    const page = Object.values(data?.query?.pages || {})[0];
-    if (page && page.imageinfo?.[0]?.url && !page.missing) return page.imageinfo[0].url;
+    const pages = data?.query?.pages || {};
+    const page = Object.values(pages)[0];
+    if (page && page.imageinfo?.[0]?.url && !page.missing) {
+      return page.imageinfo[0].url;
+    }
   } catch(e) {}
   return null;
+}
+
+function playAudio(url) {
+  new Audio(url).play();
 }
 
 function playSelectedAudio() {
@@ -1351,6 +1337,7 @@ function playSelectedAudio() {
   if (selectedAudio.hasAudio && selectedAudio.url) {
     new Audio(selectedAudio.url).play();
   } else {
+    // Web Speech fallback
     const word = getParsed().word || document.getElementById('entryInput').value.trim();
     if (!word) return;
     const u = new SpeechSynthesisUtterance(word);
@@ -1359,18 +1346,26 @@ function playSelectedAudio() {
   }
 }
 
-// ── AI Generation ──
+function selectAudio() {} // no-op kept for safety
+
+// ── Claude sentence generation ──
 async function generateSentence(pArg) {
   const k = getKeys();
   if (!k.anthropic) { toast('Add your Anthropic key in ⚙ API Keys.', 'error'); return; }
+  // Called from button (no arg) or from searchAll (with parsed object)
   const p = pArg || getParsed();
   const word = p.word || '';
   if (!word) { toast('Enter a word first.', 'error'); return; }
+  // Skip if sentence already filled (auto-call from searchAll)
   if (pArg && document.getElementById('sentDE').value.trim()) return;
 
+  const article = p.gender ? p.gender + ' ' : '';
+  const posHint = p.pos === 'verb' ? 'verb' : p.pos === 'adjective' ? 'adjective' : 'word';
   const btn = document.getElementById('sentBtn');
   btn.innerHTML = '<span class="spinner"></span>';
   btn.disabled = true;
+  document.getElementById('sentDE').value = '';
+  document.getElementById('sentEN').value = '';
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -1385,7 +1380,9 @@ async function generateSentence(pArg) {
         max_tokens: 200,
         messages: [{
           role: 'user',
-          content: `Create ONE short, natural German example sentence using the word "${p.gender ? p.gender + ' ' : ''}${word}". Reply in exactly this format:
+          content: `Create ONE short, natural German example sentence using the ${posHint} "${article}${word}". 
+A2-B1 level. Concrete, visual if possible.
+Reply in exactly this format (two lines, nothing else):
 DE: <German sentence>
 EN: <English translation>`
         }]
@@ -1398,26 +1395,51 @@ EN: <English translation>`
     if (deMatch) document.getElementById('sentDE').value = deMatch[1].trim();
     if (enMatch) document.getElementById('sentEN').value = enMatch[1].trim();
     updatePreview();
-  } catch(e) { toast('Sentence generation failed.', 'error'); }
+  } catch(e) {
+    toast('Sentence generation failed: ' + e.message, 'error');
+  }
   btn.innerHTML = 'Generate';
   btn.disabled = false;
 }
 
+// ── Check sentence ──
 async function checkSentence() {
   const k = getKeys();
   if (!k.anthropic) { toast('Add your Anthropic key in ⚙ API Keys.', 'error'); return; }
   const de = document.getElementById('sentDE').value.trim();
-  if (!de) return;
+  const en = document.getElementById('sentEN').value.trim();
+  if (!de) { toast('Write a German sentence first.', 'error'); return; }
+  const word = getParsed().word || '';
+
   const btn = document.getElementById('checkBtn');
   btn.innerHTML = '<span class="spinner"></span>';
   btn.disabled = true;
 
   const fb = document.getElementById('feedbackBox');
   fb.className = 'feedback-box visible';
-  fb.innerHTML = `<div class="feedback-section"><span class="spinner"></span> Checking…</div>`;
+  fb.innerHTML = `<div class="feedback-section"><span class="spinner"></span><span style="color:var(--muted)"> Checking…</span></div>`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const prompt = `You are a German language teacher. A student has written the following:
+
+German sentence: "${de}"${en ? `\nEnglish translation: "${en}"` : ''}${word ? `\nTarget word: "${word}"` : ''}
+
+Please check for:
+1. German grammar and spelling errors
+2. Natural phrasing (would a native speaker say it this way?)
+3. ${en ? 'Accuracy of the English translation' : 'No translation was provided — skip translation check'}
+
+When something is correct, keep the comment to 3 words or fewer (e.g. "Correct.", "Sounds natural.", "Accurate."). Only elaborate when there's an actual issue.
+
+Reply in exactly this JSON format (no markdown, no backticks):
+{
+  "grammar": { "status": "ok|warn|bad", "comment": "…" },
+  "naturalness": { "status": "ok|warn|bad", "comment": "…" },
+  "translation": { "status": "ok|warn|bad|skip", "comment": "…" },
+  "corrected": "corrected German sentence, or empty string if no changes needed"
+}`;
+
+    const res = await fetch('[https://api.anthropic.com/v1/messages](https://api.anthropic.com/v1/messages)', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1428,16 +1450,41 @@ async function checkSentence() {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 400,
-        messages: [{ role: 'user', content: `You are a German teacher. Check this sentence: "${de}". Reply ONLY with a JSON object: {"grammar": {"status": "ok|warn|bad", "comment": "..."}, "naturalness": {"status": "ok|warn|bad", "comment": "..."}, "corrected": "corrected version or empty"}` }]
+        messages: [{ role: 'user', content: prompt }]
       })
     });
+
     const data = await res.json();
-    const parsed = JSON.parse(data.content?.[0]?.text?.replace(/```json|```/g, '').trim());
-    let html = `<div class="feedback-section"><div class="feedback-label ${parsed.grammar.status}">Grammar: ${parsed.grammar.comment}</div></div>`;
-    html += `<div class="feedback-section"><div class="feedback-label ${parsed.naturalness.status}">Naturalness: ${parsed.naturalness.comment}</div></div>`;
-    if (parsed.corrected) html += `<div class="feedback-section"><div class="feedback-label warn">Corrected: ${parsed.corrected} <button class="btn btn-sm" onclick="applyCorrected('${parsed.corrected.replace(/'/g, "\\'")}')">Use</button></div></div>`;
-    fb.innerHTML = html;
-  } catch(e) { fb.innerHTML = 'Check failed.'; }
+    const raw = data.content?.[0]?.text || '';
+    let parsed;
+    try { parsed = JSON.parse(raw.replace(/^```json\s*|^```\s*|```$/gm, '').trim()); } catch(e) { throw new Error('Could not parse response'); }
+
+    const icons = { ok: '✓', warn: '⚠', bad: '✗', skip: '—' };
+    const labels = { grammar: 'Grammar & Spelling', naturalness: 'Natural phrasing', translation: 'Translation' };
+
+    let html = '';
+    for (const key of ['grammar', 'naturalness', 'translation']) {
+      const s = parsed[key];
+      if (!s || s.status === 'skip') continue;
+      html += `<div class="feedback-section">
+        <div class="feedback-label ${s.status}">${icons[s.status]} ${labels[key]}</div>
+        <div class="feedback-text">${s.comment}</div>
+      </div>`;
+    }
+    if (parsed.corrected) {
+      html += `<div class="feedback-section">
+        <div class="feedback-label warn">✎ Suggested correction</div>
+        <div class="feedback-text" style="color:var(--accent)">${parsed.corrected}
+          <button class="btn btn-sm" style="margin-left:10px;margin-top:6px;" onclick="applyCorrected(${JSON.stringify(parsed.corrected)})">Use this</button>
+        </div>
+      </div>`;
+    }
+    fb.innerHTML = html || `<div class="feedback-section"><span style="color:var(--das)">✓ Looks great!</span></div>`;
+
+  } catch(e) {
+    fb.innerHTML = `<div class="feedback-section" style="color:var(--der)">Check failed: ${e.message}</div>`;
+  }
+
   btn.innerHTML = 'Check';
   btn.disabled = false;
 }
@@ -1455,10 +1502,12 @@ function updatePreview() {
   const sentEN = document.getElementById('sentEN').value.trim();
 
   document.getElementById('previewWord').textContent = p.word || '—';
+
   const artEl = document.getElementById('previewArticle');
   artEl.textContent = p.gender || '';
   artEl.className = 'card-article ' + (p.gender || '');
 
+  // Sub-line: plural for nouns, key forms for other PoS
   let sub = '';
   if (p.gender && p.plural)                             sub = `Pl. ${p.plural}`;
   else if (p.pos === 'verb' && p.forms?.past)           sub = `${p.forms.past} · ${p.forms.participle||''}`;
@@ -1484,111 +1533,247 @@ function updatePreview() {
 
 let editingId = null;
 
-// ── Deck management ──
+// ── Add / Replace card ──
 function addToDeck() {
   const p = getParsed();
-  if (!p.word) return;
+  if (!p.word) { toast('No word entered.', 'error'); return; }
 
+  // Compact forms string for the Anki Forms field
   let formsStr = '';
-  if (p.pos === 'noun' && p.plural) formsStr = `Pl. ${p.plural}`;
-  else if (p.pos === 'verb' && p.forms?.past) formsStr = [p.forms.past, p.forms.participle, p.forms.auxiliary ? `(${p.forms.auxiliary})` : ''].filter(Boolean).join(' · ');
-  else if (p.pos === 'adjective' && p.forms?.comparative) formsStr = [p.forms.comparative, p.forms.superlative].filter(Boolean).join(' · ');
+  if (p.pos === 'noun' && p.plural)
+    formsStr = `Pl. ${p.plural}`;
+  else if (p.pos === 'verb' && p.forms?.past)
+    formsStr = [p.forms.past, p.forms.participle, p.forms.auxiliary ? `(${p.forms.auxiliary})` : ''].filter(Boolean).join(' · ');
+  else if (p.pos === 'adjective' && p.forms?.comparative)
+    formsStr = [p.forms.comparative, p.forms.superlative].filter(Boolean).join(' · ');
 
   const cardData = {
-    word:         p.word,
-    gender:       p.gender,
-    plural:       p.plural,
-    pos:          p.pos,
-    forms:        p.forms,
+    word:        p.word,
+    gender:      p.gender,
+    plural:      p.plural,
+    pos:         p.pos,
+    forms:       p.forms,
     formsStr,
-    sentDE:       document.getElementById('sentDE').value.trim(),
-    sentEN:       document.getElementById('sentEN').value.trim(),
-    definition:   document.getElementById('definitionInput').value.trim(),
-    definitionDE: document.getElementById('definitionDEInput').value.trim(),
-    imageUrl:     selectedImage?.url || '',
-    audioUrl:     selectedAudio?.url || '',
-    audioFile:    selectedAudio?.filename || '',
-    hasAudio:     selectedAudio?.hasAudio || false,
+    sentDE:      document.getElementById('sentDE').value.trim(),
+    sentEN:      document.getElementById('sentEN').value.trim(),
+    definition:  document.getElementById('definitionInput').value.trim(),
+    imageUrl:    selectedImage?.url || '',
+    audioUrl:    selectedAudio?.url || '',
+    audioFile:   selectedAudio?.filename || '',
+    hasAudio:    selectedAudio?.hasAudio || false,
   };
 
   if (editingId !== null) {
     deck = deck.map(c => c.id === editingId ? { ...cardData, id: editingId } : c);
+    saveDeck();
     cancelEdit();
+    renderDeck();
+    toast(`"${cardData.gender ? cardData.gender + ' ' : ''}${cardData.word}" updated!`, 'success');
   } else {
     deck.push({ ...cardData, id: Date.now() });
+    saveDeck();
+    renderDeck();
+    toast(`"${cardData.gender ? cardData.gender + ' ' : ''}${cardData.word}" added to deck!`, 'success');
     clearCard();
   }
-  saveDeck();
-  renderDeck();
-  toast('Card added/updated!');
 }
 
 function editCard(id) {
   const card = deck.find(c => c.id === id);
   if (!card) return;
+
   editingId = id;
+
+  // Restore entry input
   document.getElementById('entryInput').value = card.word;
-  renderChips({ word: card.word, gender: card.gender||'', plural: card.plural||'', pos: card.pos||'noun', forms: card.forms||{} });
-  document.getElementById('sentDE').value = card.sentDE || '';
-  document.getElementById('sentEN').value = card.sentEN || '';
+
+  // Restore parsed state and render chips
+  parsedWord = { word: card.word, gender: card.gender||'', plural: card.plural||'', pos: card.pos||'noun', forms: card.forms||{} };
+  renderChips(parsedWord);
+
+  document.getElementById('sentDE').value       = card.sentDE || '';
+  document.getElementById('sentEN').value       = card.sentEN || '';
   document.getElementById('definitionInput').value = card.definition || '';
-  document.getElementById('definitionDEInput').value = card.definitionDE || '';
-  selectedImage = card.imageUrl ? { url: card.imageUrl } : null;
-  selectedAudio = card.hasAudio ? { url: card.audioUrl, filename: card.audioFile, hasAudio: true } : null;
+
+  selectedImage = card.imageUrl ? { url: card.imageUrl, thumb: card.imageUrl } : null;
+  selectedAudio = card.hasAudio && card.audioUrl
+    ? { url: card.audioUrl, filename: card.audioFile, hasAudio: true }
+    : { url: null, filename: null, hasAudio: false };
+
+  const audioList = document.getElementById('audioList');
+  if (card.hasAudio) {
+    audioList.innerHTML = `<div class="audio-item selected"><div class="audio-play" onclick="playSelectedAudio()">▶</div><div class="audio-meta"><div class="speaker">Wiktionary recording</div><div class="country" style="color:var(--das);font-size:0.75rem;font-family:var(--font-mono);">✓ Embedded</div></div></div>`;
+  } else {
+    audioList.innerHTML = `<div class="audio-item selected"><div class="audio-play" onclick="playSelectedAudio()">▶</div><div class="audio-meta"><div class="speaker">Web Speech (TTS)</div><div class="country" style="color:var(--accent);font-size:0.75rem;font-family:var(--font-mono);">⚠ Preview only</div></div></div>`;
+  }
+  document.getElementById('previewAudioBtn').style.display = 'flex';
+
   document.getElementById('addBtn').textContent = '✓ Replace Card';
   document.getElementById('cancelEditBtn').style.display = '';
+
+  selectedDeckId = null;
+  renderDeck();
   updatePreview();
+  document.querySelector('.left-panel').scrollTo({ top: 0, behavior: 'smooth' });
+  toast(`Editing "${card.word}" — make changes and click Replace Card.`, '');
 }
 
 function cancelEdit() {
   editingId = null;
-  document.getElementById('addBtn').textContent = '+ Add to Deck';
+  document.getElementById('addBtn').textContent          = '+ Add to Deck';
   document.getElementById('cancelEditBtn').style.display = 'none';
   clearCard();
 }
 
 function removeFromDeck(id) {
+  if (selectedDeckId === id) selectedDeckId = null;
   deck = deck.filter(c => c.id !== id);
   saveDeck();
   renderDeck();
 }
 
+let selectedDeckId = null;
+
 function renderDeck() {
   const el = document.getElementById('deckList');
   const count = document.getElementById('deckCount');
+  const panel = document.querySelector('.deck-panel');
   count.textContent = `${deck.length} card${deck.length !== 1 ? 's' : ''}`;
-  if (deck.length === 0) { el.innerHTML = '<div class="deck-empty">No cards yet.</div>'; return; }
+  if (deck.length === 0) {
+    el.innerHTML = '<div class="deck-empty">No cards yet. Build your first one above!</div>';
+    panel.classList.remove('expanded');
+    selectedDeckId = null;
+    return;
+  }
   el.innerHTML = '';
   deck.forEach(card => {
+    const isSelected = card.id === selectedDeckId;
     const div = document.createElement('div');
-    div.className = 'deck-item';
+    div.className = 'deck-item' + (isSelected ? ' selected' : '');
+
+    const imgTag = card.imageUrl
+      ? `<img class="deck-item-img" src="${card.imageUrl}" alt="" />`
+      : '<div class="deck-item-img"></div>';
+
+    const expandedHTML = isSelected ? `
+      <div class="deck-item-expanded">
+        <div class="mini-pair">
+          <div class="mini-half">
+            <div class="mini-half-label">front</div>
+            ${card.imageUrl
+              ? `<img class="mini-front-img" src="${card.imageUrl}" alt="" />`
+              : `<div class="mini-front-placeholder">No image</div>`}
+          </div>
+          <div class="mini-half">
+            <div class="mini-half-label">back</div>
+            <div class="mini-back-body">
+              <div class="mini-article ${card.gender}">${card.gender || ''}</div>
+              <div class="mini-word">${card.word}</div>
+              ${card.formsStr ? `<div class="mini-plural">${card.formsStr}</div>` : card.plural ? `<div class="mini-plural">Pl. ${card.plural}</div>` : ''}
+              ${card.sentDE ? `<hr style="border:none;border-top:1px solid #333;margin:6px 0;width:100%;"><div class="mini-sentence">${card.sentDE}</div>` : ''}
+              ${card.sentEN ? `<div class="mini-translation">${card.sentEN}</div>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>` : '';
+
     div.innerHTML = `
-      <div class="deck-item-row" onclick="editCard(${card.id})">
-        ${card.imageUrl ? `<img class="deck-item-img" src="${card.imageUrl}">` : '<div class="deck-item-img"></div>'}
-        <div class="deck-item-word"><span class="deck-item-article ${card.gender}">${card.gender || ''}</span>${card.word}</div>
-        <button class="deck-item-remove" onclick="event.stopPropagation();removeFromDeck(${card.id})">✕</button>
-      </div>`;
+      <div class="deck-item-row">
+        ${imgTag}
+        <div class="deck-item-word">
+          <span class="deck-item-article ${card.gender}">${card.gender || ''}</span>${card.word}
+          ${card.plural ? `<span style="color:var(--muted);font-size:0.75rem;margin-left:5px;">/ ${card.plural}</span>` : ''}
+        </div>
+        <button class="deck-item-edit" onclick="event.stopPropagation();editCard(${card.id})" title="Edit">✎</button>
+        <button class="deck-item-remove" onclick="event.stopPropagation();removeFromDeck(${card.id})" title="Remove">✕</button>
+      </div>
+      ${expandedHTML}
+    `;
+
+    div.addEventListener('click', () => selectDeckItem(card.id));
     el.appendChild(div);
   });
+
+  panel.classList.toggle('expanded', !!selectedDeckId);
 }
 
-// ── Export Anki ──
+function selectDeckItem(id) {
+  selectedDeckId = (selectedDeckId === id) ? null : id;
+  renderDeck();
+  if (selectedDeckId) {
+    setTimeout(() => {
+      const items = document.querySelectorAll('.deck-item.selected');
+      if (items[0]) items[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 50);
+  }
+}
+
+function toggleMiniFlip() {} // no-op, kept for safety
+
+// ── Export CSV ──
 async function exportApkg() {
-  if (deck.length === 0) return;
-  toast('Building .apkg…');
+  if (deck.length === 0) { toast('Your deck is empty!', 'error'); return; }
+  toast('Building .apkg — fetching images…', '');
+
   try {
-    const SQL = await window.initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` });
+    // Wait for libs (loaded via <script> tags, may still be initialising)
+    if (!window.JSZip) throw new Error('JSZip not loaded yet — please wait a moment and try again.');
+    const SQL = await window.initSqlJs({
+      locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}`
+    });
+
     const now = Math.floor(Date.now() / 1000);
     const modelId = 1700000000000;
     const deckId  = 1700000000001;
 
-    const mediaJson = {};
+    // ── Fetch & map images + audio ──
+    const mediaJson  = {};
     const mediaBlobs = {};
+    const imageField = {};
+    const audioField = {};
     let mi = 0;
 
+    for (const card of deck) {
+      // Image
+      if (card.imageUrl) {
+        try {
+          const resp = await fetch(card.imageUrl);
+          const blob = await resp.blob();
+          const ext  = blob.type.includes('png') ? 'png' : 'jpg';
+          const safe = card.word.toLowerCase().replace(/[^a-z0-9äöü]/g, '_');
+          const filename = `wk_${safe}_${mi}.${ext}`;
+          mediaJson[String(mi)]  = filename;
+          mediaBlobs[String(mi)] = blob;
+          imageField[card.id]    = `<img src="${filename}">`;
+          mi++;
+        } catch(e) {
+          imageField[card.id] = '';
+        }
+      } else {
+        imageField[card.id] = '';
+      }
+
+      // Audio
+      if (card.hasAudio && card.audioUrl) {
+        try {
+          const resp = await fetch(card.audioUrl);
+          const blob = await resp.blob();
+          const filename = card.audioFile || `wk_audio_${mi}.ogg`;
+          mediaJson[String(mi)]  = filename;
+          mediaBlobs[String(mi)] = blob;
+          audioField[card.id]    = `[sound:${filename}]`;
+          mi++;
+        } catch(e) {
+          audioField[card.id] = '';
+        }
+      } else {
+        audioField[card.id] = ''; // template uses Web Speech fallback
+      }
+    }
+
+    // ── Build SQLite db ──
     const db = new SQL.Database();
-    
-    // Anki Desktop requires a complete database schema
+
     db.run(`CREATE TABLE col (
       id integer PRIMARY KEY, crt integer NOT NULL, mod integer NOT NULL,
       scm integer NOT NULL, ver integer NOT NULL, dty integer NOT NULL,
@@ -1609,73 +1794,176 @@ async function exportApkg() {
       lapses integer NOT NULL, left integer NOT NULL, odue integer NOT NULL,
       odid integer NOT NULL, flags integer NOT NULL, data text NOT NULL
     )`);
+    db.run(`CREATE TABLE graves (usn integer NOT NULL, oid integer NOT NULL, type integer NOT NULL)`);
     db.run(`CREATE TABLE revlog (
       id integer PRIMARY KEY, cid integer NOT NULL, usn integer NOT NULL,
       ease integer NOT NULL, ivl integer NOT NULL, lastIvl integer NOT NULL,
       factor integer NOT NULL, time integer NOT NULL, type integer NOT NULL
     )`);
-    db.run(`CREATE TABLE graves (usn integer NOT NULL, oid integer NOT NULL, type integer NOT NULL)`);
 
+    // ── Model ──
+    const fldDef = name => ({ name, ord: 0, sticky: false, rtl: false, font: 'Arial', size: 20, media: [] });
     const model = { [modelId]: {
-      id: String(modelId), name: 'German Vocab', type: 0, mod: now, usn: -1, sortf: 2, did: deckId,
-      tmpls: [{ name: 'Recognition', ord: 0, qfmt: `<div class='front'>{{Image}}</div>`, afmt: `<div class='front'>{{Image}}</div><div class='back'><div class='article {{Article}}'>{{Article}}</div><div class='word'>{{Word}}</div><div class='pos'>{{Part_of_Speech}}</div><div class='forms'>{{Forms}}</div><div class='definition'>{{Definition_EN}}</div><div class='definition-de'>{{Definition_DE}}</div><hr><div class='sentence'>{{Sentence_DE}}</div><div class='translation'>{{Sentence_EN}}</div></div>` }],
-      flds: ['Image','Article','Word','Part_of_Speech','Forms','Audio','Sentence_DE','Sentence_EN','Definition_EN','Definition_DE'].map((n,i)=>({name:n, ord:i, sticky:false, rtl:false, font:'Arial', size:20, media:[]})),
-      css: `.card{font-family:Helvetica;text-align:center;background:#1a1a1a;color:#f0e8d8}.back{padding:16px}.word{font-size:36px;font-family:Georgia}.article.der{color:#e05c5c}.article.die{color:#5ca8e0}.article.das{color:#5ce09a}.pos{font-size:10px;color:#777;text-transform:uppercase}.forms{font-style:italic;color:#aaa;font-size:13px}.definition{font-weight:bold;margin:8px 0}.definition-de{font-size:12px;color:#888}.sentence{margin-top:12px}`,
+      id: String(modelId), name: 'German Vocab (Fluent Forever)',
+      type: 0, mod: now, usn: -1, sortf: 2, did: deckId,
+      tmpls: [{
+        name: 'Recognition', ord: 0,
+        qfmt: `<div class='front'>{{Image}}</div>`,
+        afmt: `<div class='front'>{{Image}}</div><div class='back'><div class='article {{Article}}'>{{Article}}</div><div class='word'>{{Word}}</div>{{#Forms}}<div class='forms'>{{Forms}}</div>{{/Forms}}<div class='audio-row'>{{#Audio}}{{Audio}}{{/Audio}}{{^Audio}}<button class='speak-btn' onclick="var u=new SpeechSynthesisUtterance('{{Word}}');u.lang='de-DE';speechSynthesis.speak(u)">▶ Hear it</button>{{/Audio}}</div>{{#Sentence_DE}}<hr><div class='sentence'>{{Sentence_DE}}</div>{{/Sentence_DE}}{{#Sentence_EN}}<div class='translation'>{{Sentence_EN}}</div>{{/Sentence_EN}}</div>`,
+        bqfmt: '', bafmt: '', did: null, bfont: '', bsize: 0
+      }],
+      flds: ['Image','Article','Word','Forms','Audio','Sentence_DE','Sentence_EN','Definition'].map((n,i) => ({...fldDef(n), ord: i})),
+      css: `.card{font-family:Helvetica,sans-serif;font-size:18px;text-align:center;background:#1a1a1a;color:#f0e8d8;padding:0;margin:0}
+.front img{width:100%;max-height:55vh;object-fit:contain;display:block}
+.back{padding:16px 20px 14px}
+.article{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:lowercase;margin-bottom:2px}
+.article.der{color:#e05c5c}.article.die{color:#5ca8e0}.article.das{color:#5ce09a}
+.word{font-size:36px;font-weight:700;margin:2px 0 4px;font-family:Georgia,serif}
+.forms{font-size:13px;color:#aaa;margin:2px 0 8px;font-style:italic}
+.audio-row{margin:6px 0}
+.speak-btn{background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.3);border-radius:20px;padding:5px 14px;color:#c9a84c;font-size:13px;cursor:pointer}
+.sentence{font-size:15px;margin:10px 0 4px;line-height:1.6}
+.translation{font-size:12px;color:#888;line-height:1.5}
+hr{border:none;border-top:1px solid #333;margin:10px 0}`,
+      latexPre: '\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\pagestyle{empty}\n\\begin{document}\n',
+      latexPost: '\end{document}',
+      tags: [], vers: []
     }};
 
-    db.run(`INSERT INTO col VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, [1, now, now, now, 11, 0, -1, 0, '{}', JSON.stringify(model), '{}', '{}', '{}']);
+    const deckObj = {
+      [String(deckId)]: {
+        id: deckId, name: 'German Vocab', conf: 1, desc: '', dyn: 0, collapsed: false,
+        mod: now, usn: -1, lrnToday:[0,0], revToday:[0,0], newToday:[0,0], timeToday:[0,0],
+        extendNew: 10, extendRev: 50
+      },
+      '1': {
+        id: 1, name: 'Default', conf: 1, desc: '', dyn: 0, collapsed: false,
+        mod: now, usn: -1, lrnToday:[0,0], revToday:[0,0], newToday:[0,0], timeToday:[0,0],
+        extendNew: 10, extendRev: 50
+      }
+    };
 
-    for (let i=0; i<deck.length; i++) {
-      const c = deck[i];
-      const sep = '\x1f';
-      const flds = ['', c.gender||'', c.word||'', c.pos||'', c.formsStr||'', '', c.sentDE||'', c.sentEN||'', c.definition||'', c.definitionDE||''].join(sep);
-      db.run(`INSERT INTO notes VALUES (?,?,?,?,?,?,?,?,?,?,?)`, [now*1000+i, Math.random().toString(36), modelId, now, -1, '', flds, c.word, 0, 0, '']);
-      db.run(`INSERT INTO cards VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [now*1000+i+500000, now*1000+i, deckId, 0, now, -1, 0, 0, i+1, 0, 0, 0, 0, 0, 0, 0, 0, '']);
+    const dconf = { '1': {
+      id: 1, name: 'Default', replayq: true, timer: 0, maxTaken: 60, usn: 0, mod: 0, autoplay: true,
+      new:   { delays:[1,10], ints:[1,4,7], initialFactor:2500, separate:true, order:1, perDay:20, bury:false },
+      lapse: { delays:[10], leechFails:8, leechAction:0, mult:0, minInt:1 },
+      rev:   { perDay:200, ease4:1.3, fuzz:0.05, minSpace:1, ivlFct:1, maxIvl:36500, bury:false }
+    }};
+
+    const conf = {
+      nextPos:1, estTimes:true, activeDecks:[1], sortType:'noteFld',
+      timeLim:0, sortBackwards:false, addToCur:true, curDeck:String(deckId),
+      newBury:true, newSpread:0, dueCounts:true, curModel:String(modelId), collapseTime:1200
+    };
+
+    db.run(`INSERT INTO col VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, [
+      1, now, now, now, 11, 0, -1, 0,
+      JSON.stringify(conf), JSON.stringify(model),
+      JSON.stringify(deckObj), JSON.stringify(dconf), '{}'
+    ]);
+
+    // ── Notes & Cards ──
+    deck.forEach((card, i) => {
+      const noteId = now * 1000 + i;
+      const cardId = now * 1000 + i + 500000;
+      const sep  = '\x1f';
+      const flds = [imageField[card.id]||'', card.gender||'', card.word||'',
+                    card.formsStr||'', audioField[card.id]||'', card.sentDE||'', card.sentEN||'', card.definition||''].join(sep);
+      const guid = Math.random().toString(36).slice(2, 12);
+      const tags = card.gender ? ` ${card.gender} ` : ' ';
+      db.run(`INSERT INTO notes VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        [noteId, guid, modelId, now, -1, tags, flds, card.word||'', strHash(card.word||''), 0, '']);
+      db.run(`INSERT INTO cards VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [cardId, noteId, deckId, 0, now, -1, 0, 0, i+1, 0, 0, 0, 0, 0, 0, 0, 0, '']);
+    });
+
+    db.run(`CREATE INDEX ix_notes_usn ON notes (usn)`);
+    db.run(`CREATE INDEX ix_cards_usn ON cards (usn)`);
+    db.run(`CREATE INDEX ix_cards_nid ON cards (nid)`);
+    db.run(`CREATE INDEX ix_cards_sched ON cards (did, queue, due)`);
+    db.run(`CREATE INDEX ix_revlog_usn ON revlog (usn)`);
+    db.run(`CREATE INDEX ix_revlog_cid ON revlog (cid)`);
+
+    const dbBytes = db.export();
+
+    // ── Zip ──
+    const zip = new JSZip();
+    zip.file('collection.anki2', dbBytes);
+    zip.file('media', JSON.stringify(mediaJson));
+    for (const [idx, blob] of Object.entries(mediaBlobs)) {
+      zip.file(idx, blob);
     }
 
-    const zip = new JSZip();
-    zip.file('collection.anki2', db.export());
-    zip.file('media', '{}');
-    const blob = await zip.generateAsync({ type: 'blob' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'german.apkg'; a.click();
-    toast('Export successful!', 'success');
-  } catch(e) { 
+    const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'german-vocab.apkg'; a.click();
+    URL.revokeObjectURL(url);
+    toast(`Exported ${deck.length} card${deck.length!==1?'s':''} as german-vocab.apkg!`, 'success');
+
+  } catch(e) {
     console.error(e);
-    toast('Export failed.', 'error'); 
+    toast('Export failed: ' + e.message, 'error');
   }
 }
 
+function strHash(str) {
+  // Simple checksum for Anki's csum field
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = Math.imul(31, h) + str.charCodeAt(i) | 0;
+  return Math.abs(h);
+}
+
+// ── Clear ──
 function clearCard() {
   editingId = null;
   parsedWord = {};
+  document.getElementById('addBtn').textContent = '+ Add to Deck';
+  document.getElementById('cancelEditBtn').style.display = 'none';
   document.getElementById('entryInput').value = '';
   document.getElementById('parsedTags').innerHTML = '';
+  document.getElementById('parsedTags').classList.remove('visible');
   document.getElementById('sentDE').value = '';
   document.getElementById('sentEN').value = '';
   document.getElementById('definitionInput').value = '';
-  document.getElementById('definitionDEInput').value = '';
-  document.getElementById('imageGrid').innerHTML = '';
-  document.getElementById('audioList').innerHTML = '';
+  document.getElementById('imageLang').value = 'de';
+  document.getElementById('imageGrid').innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:10px 0;">Enter a word and click Search All.</div>';
+  document.getElementById('audioList').innerHTML = '<div style="color:var(--muted);font-size:0.85rem;">No pronunciations loaded yet.</div>';
+  document.getElementById('feedbackBox').className = 'feedback-box';
+  document.getElementById('imageQuery').value = '';
+  document.getElementById('img-status').textContent = '';
+  document.getElementById('audio-status').textContent = '';
   document.getElementById('previewAudioBtn').style.display = 'none';
   selectedImage = null;
   selectedAudio = null;
+  audioObjects = {};
   updatePreview();
 }
 
-function toast(msg, type='') {
+// ── Toast ──
+function toast(msg, type = '') {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.className = 'show ' + type;
-  setTimeout(() => el.className = '', 2000);
+  setTimeout(() => el.className = '', 2800);
 }
 
-loadDeck();
-renderDeck();
+// ── Live preview on typing ──
+['sentDE','sentEN'].forEach(id =>
+  document.getElementById(id).addEventListener('input', updatePreview)
+);
+
+// ── Init ──
 updateApiStatus();
 updatePreview();
+loadDeck();
+renderDeck();
 
+// Auto-open settings if no keys saved
 const k = getKeys();
-if (!k.pixabay && !k.anthropic) setTimeout(openSettings, 400);
+if (!k.pixabay && !k.anthropic) {
+  setTimeout(openSettings, 400);
+}
 </script>
 </body>
 </html>
