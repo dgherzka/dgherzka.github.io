@@ -857,17 +857,6 @@
 
     <hr class="divider" />
 
-    <!-- Definition -->
-    <div>
-      <div class="section-label" style="display:flex;justify-content:space-between;">
-        <span>English Definition</span>
-        <button class="btn btn-sm" onclick="generateDefinition()" id="defBtn">Generate</button>
-      </div>
-      <textarea class="small-input" id="definitionInput" placeholder="English definition (stored in card, not shown during review)…" style="width:100%;min-height:56px;resize:vertical;line-height:1.5;font-family:var(--font-serif);font-size:0.9rem;"></textarea>
-    </div>
-
-    <hr class="divider" />
-
     <!-- Add to deck -->
     <button class="btn btn-primary" id="addBtn" onclick="addToDeck()" style="width:100%;">+ Add to Deck</button>
     <button class="btn" id="cancelEditBtn" onclick="cancelEdit()" style="width:100%;display:none;">✕ Cancel Edit</button>
@@ -1129,6 +1118,12 @@ async function searchAll() {
   const btn = document.getElementById('searchBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Parsing…';
+
+  // Clear previous fetched data to avoid stuck sentences
+  document.getElementById('sentDE').value = '';
+  document.getElementById('sentEN').value = '';
+  document.getElementById('definitionInput').value = '';
+  document.getElementById('feedbackBox').className = 'feedback-box';
 
   const word = await parseEntry(raw);
   const p = getParsed();
@@ -1444,7 +1439,7 @@ Reply in exactly this JSON format (no markdown, no backticks):
   "corrected": "corrected German sentence, or empty string if no changes needed"
 }`;
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('[https://api.anthropic.com/v1/messages](https://api.anthropic.com/v1/messages)', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
