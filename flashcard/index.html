@@ -996,6 +996,24 @@
 <script>
 // ── State ──
 let deck = [];
+
+// ── Convenience URL Parameter Support ──
+function checkUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+  const pixabay = params.get('pixabay') || params.get('pixabay_key');
+  const anthropic = params.get('anthropic') || params.get('anthropic_key');
+
+  if (pixabay) localStorage.setItem('wk_pixabay', pixabay);
+  if (anthropic) localStorage.setItem('wk_anthropic', anthropic);
+
+  if (pixabay || anthropic) {
+    // Clean URL without refreshing to prevent key leakage in share screenshots
+    const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+    window.history.replaceState({path: cleanUrl}, '', cleanUrl);
+    toast('API keys imported from URL', 'success');
+  }
+}
+
 function clearStorage() {
   if (!confirm('This will delete your saved deck and API keys. Are you sure?')) return;
   localStorage.removeItem('wk_deck');
@@ -1795,6 +1813,8 @@ function toast(msg, type='') {
   setTimeout(() => el.className = '', 2000);
 }
 
+// ── Init ──
+checkUrlParams();
 loadDeck();
 renderDeck();
 updateApiStatus();
