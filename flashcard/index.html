@@ -1587,9 +1587,34 @@ async function exportApkg() {
     let mi = 0;
 
     const db = new SQL.Database();
-    db.run(`CREATE TABLE col (id integer PRIMARY KEY, crt integer NOT NULL, mod integer NOT NULL, scm integer NOT NULL, ver integer NOT NULL, dty integer NOT NULL, usn integer NOT NULL, ls integer NOT NULL, conf text NOT NULL, models text NOT NULL, decks text NOT NULL, dconf text NOT NULL, tags text NOT NULL)`);
-    db.run(`CREATE TABLE notes (id integer PRIMARY KEY, guid text NOT NULL, mid integer NOT NULL, mod integer NOT NULL, usn integer NOT NULL, tags text NOT NULL, flds text NOT NULL, sfld text NOT NULL, csum integer NOT NULL, flags integer NOT NULL, data text NOT NULL)`);
-    db.run(`CREATE TABLE cards (id integer PRIMARY KEY, nid integer NOT NULL, did integer NOT NULL, ord integer NOT NULL, mod integer NOT NULL, usn integer NOT NULL, type integer NOT NULL, queue integer NOT NULL, due integer NOT NULL, ivl integer NOT NULL, factor integer NOT NULL, reps integer NOT NULL, lapses integer NOT NULL, left integer NOT NULL, odue integer NOT NULL, odid integer NOT NULL, flags integer NOT NULL, data text NOT NULL)`);
+    
+    // Anki Desktop requires a complete database schema
+    db.run(`CREATE TABLE col (
+      id integer PRIMARY KEY, crt integer NOT NULL, mod integer NOT NULL,
+      scm integer NOT NULL, ver integer NOT NULL, dty integer NOT NULL,
+      usn integer NOT NULL, ls integer NOT NULL, conf text NOT NULL,
+      models text NOT NULL, decks text NOT NULL, dconf text NOT NULL, tags text NOT NULL
+    )`);
+    db.run(`CREATE TABLE notes (
+      id integer PRIMARY KEY, guid text NOT NULL, mid integer NOT NULL,
+      mod integer NOT NULL, usn integer NOT NULL, tags text NOT NULL,
+      flds text NOT NULL, sfld text NOT NULL, csum integer NOT NULL,
+      flags integer NOT NULL, data text NOT NULL
+    )`);
+    db.run(`CREATE TABLE cards (
+      id integer PRIMARY KEY, nid integer NOT NULL, did integer NOT NULL,
+      ord integer NOT NULL, mod integer NOT NULL, usn integer NOT NULL,
+      type integer NOT NULL, queue integer NOT NULL, due integer NOT NULL,
+      ivl integer NOT NULL, factor integer NOT NULL, reps integer NOT NULL,
+      lapses integer NOT NULL, left integer NOT NULL, odue integer NOT NULL,
+      odid integer NOT NULL, flags integer NOT NULL, data text NOT NULL
+    )`);
+    db.run(`CREATE TABLE revlog (
+      id integer PRIMARY KEY, cid integer NOT NULL, usn integer NOT NULL,
+      ease integer NOT NULL, ivl integer NOT NULL, lastIvl integer NOT NULL,
+      factor integer NOT NULL, time integer NOT NULL, type integer NOT NULL
+    )`);
+    db.run(`CREATE TABLE graves (usn integer NOT NULL, oid integer NOT NULL, type integer NOT NULL)`);
 
     const model = { [modelId]: {
       id: String(modelId), name: 'German Vocab', type: 0, mod: now, usn: -1, sortf: 2, did: deckId,
@@ -1613,7 +1638,11 @@ async function exportApkg() {
     zip.file('media', '{}');
     const blob = await zip.generateAsync({ type: 'blob' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'german.apkg'; a.click();
-  } catch(e) { toast('Export failed.', 'error'); }
+    toast('Export successful!', 'success');
+  } catch(e) { 
+    console.error(e);
+    toast('Export failed.', 'error'); 
+  }
 }
 
 function clearCard() {
