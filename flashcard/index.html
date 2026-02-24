@@ -450,10 +450,29 @@
   }
   .card-divider { border: none; border-top: 1px solid #333333; margin: 10px 0; width: 100%; }
   .card-sentence { font-size: 15px; color: #f0e8d8; line-height: 1.6; margin: 10px 0 4px; text-align: center; }
+  
+  /* Blurring logic */
+  .blur-reveal {
+    filter: blur(12px);
+    transition: filter 0.2s ease;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .blur-reveal.revealed {
+    filter: blur(0);
+  }
+
   .card-translation { font-size: 12px; color: #888888; line-height: 1.5; text-align: center; margin-bottom: 12px; }
+  .card-definition-primary { font-weight: bold; margin: 8px 0; font-size: 14px; color: #f0e8d8; }
+  .card-definition-secondary { font-size: 12px; color: #888888; margin-bottom: 8px; }
+
   .card-footer {
-    display: flex; align-items: center; justify-content: center;
-    width: 100%; position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    position: relative;
     padding-top: 8px;
     margin-bottom: 8px;
   }
@@ -818,8 +837,8 @@
         <button class="btn btn-sm" onclick="generateDefinitions()" id="defBtn">Generate</button>
       </div>
       <div class="sentence-box">
-        <textarea class="sentence-edit" id="definitionInput" placeholder="English definition…" style="color:var(--text);font-size:0.95rem;min-height:36px;"></textarea>
-        <textarea class="sentence-en-edit" id="definitionDEInput" placeholder="German definition…" style="color:var(--muted);font-size:0.85rem;min-height:36px;"></textarea>
+        <textarea class="sentence-edit" id="definitionDEInput" placeholder="German definition…" style="color:var(--text);font-size:0.95rem;min-height:36px;"></textarea>
+        <textarea class="sentence-en-edit" id="definitionInput" placeholder="English definition…" style="color:var(--muted);font-size:0.85rem;min-height:36px;"></textarea>
       </div>
     </div>
 
@@ -908,9 +927,15 @@
             <div class="card-article" id="previewArticle"></div>
             <div class="card-word" id="previewWord">—</div>
             <div class="card-plural" id="previewPlural"></div>
+            <div class="card-definition-primary" id="previewDefinitionDE"></div>
+            <div class="card-definition-secondary blur-reveal" id="previewDefinitionEN" 
+              onmousedown="handleRevealStart(this)" onmouseup="handleRevealEnd(this)"
+              ontouchstart="handleRevealStart(this)" ontouchend="handleRevealEnd(this)"></div>
             <hr class="card-divider" id="previewDivider" style="display:none;" />
             <div class="card-sentence" id="previewSentDE"></div>
-            <div class="card-translation" id="previewSentEN"></div>
+            <div class="card-translation blur-reveal" id="previewSentEN"
+              onmousedown="handleRevealStart(this)" onmouseup="handleRevealEnd(this)"
+              ontouchstart="handleRevealStart(this)" ontouchend="handleRevealEnd(this)"></div>
             <div class="card-footer">
               <div style="position:relative; display:inline-flex; align-items:center; justify-content:center;">
                 <button class="card-audio-btn" id="previewAudioBtn" onclick="playSelectedAudio()">
@@ -983,6 +1008,17 @@ function loadDeck() { try { const d = localStorage.getItem('wk_deck'); if (d) de
 let selectedImage = null;
 let selectedAudio = null;
 let audioObjects = {};
+
+// ── Long Press Logic ──
+let revealTimeout = null;
+function handleRevealStart(el) {
+  revealTimeout = setTimeout(() => {
+    el.classList.add('revealed');
+  }, 500); // 500ms for long press
+}
+function handleRevealEnd(el) {
+  clearTimeout(revealTimeout);
+}
 
 // ── Keys ──
 function getKeys() {
@@ -1140,7 +1176,7 @@ async function searchAll() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Parsing…';
 
-  // Clear previous fetched data to avoid stuck content
+  // Clear previous fetched data
   document.getElementById('sentDE').value = '';
   document.getElementById('sentEN').value = '';
   document.getElementById('definitionInput').value = '';
@@ -1454,6 +1490,8 @@ function applyCorrected(text) {
 // ── Preview update ──
 function updatePreview() {
   const p      = getParsed();
+  const defEN  = document.getElementById('definitionInput').value.trim();
+  const defDE  = document.getElementById('definitionDEInput').value.trim();
   const sentDE = document.getElementById('sentDE').value.trim();
   const sentEN = document.getElementById('sentEN').value.trim();
 
@@ -1468,8 +1506,15 @@ function updatePreview() {
   else if (p.pos === 'adjective' && p.forms?.comparative) sub = `${p.forms.comparative} · ${p.forms.superlative||''}`;
   document.getElementById('previewPlural').textContent = sub;
 
+  // Visual Swap: German more prominent
+  document.getElementById('previewDefinitionDE').textContent = defDE;
+  document.getElementById('previewDefinitionEN').textContent = defEN;
+  document.getElementById('previewDefinitionEN').classList.remove('revealed'); // Reset blur on change
+
   document.getElementById('previewSentDE').textContent = sentDE;
   document.getElementById('previewSentEN').textContent = sentEN;
+  document.getElementById('previewSentEN').classList.remove('revealed'); // Reset blur on change
+
   document.getElementById('previewDivider').style.display = sentDE ? 'block' : 'none';
 
   const tag = document.getElementById('previewGenderTag');
@@ -1590,7 +1635,6 @@ async function exportApkg() {
     const modelId = 1700000000000;
     const deckId  = 1700000000001;
 
-    // ── Fetch & map images + audio ──
     const mediaJson  = {};
     const mediaBlobs = {};
     const imageField = {};
@@ -1626,89 +1670,73 @@ async function exportApkg() {
     }
 
     const db = new SQL.Database();
-    
-    // Anki Desktop requires a complete database schema
-    db.run(`CREATE TABLE col (
-      id integer PRIMARY KEY, crt integer NOT NULL, mod integer NOT NULL,
-      scm integer NOT NULL, ver integer NOT NULL, dty integer NOT NULL,
-      usn integer NOT NULL, ls integer NOT NULL, conf text NOT NULL,
-      models text NOT NULL, decks text NOT NULL, dconf text NOT NULL, tags text NOT NULL
-    )`);
-    db.run(`CREATE TABLE notes (
-      id integer PRIMARY KEY, guid text NOT NULL, mid integer NOT NULL,
-      mod integer NOT NULL, usn integer NOT NULL, tags text NOT NULL,
-      flds text NOT NULL, sfld text NOT NULL, csum integer NOT NULL,
-      flags integer NOT NULL, data text NOT NULL
-    )`);
-    db.run(`CREATE TABLE cards (
-      id integer PRIMARY KEY, nid integer NOT NULL, did integer NOT NULL,
-      ord integer NOT NULL, mod integer NOT NULL, usn integer NOT NULL,
-      type integer NOT NULL, queue integer NOT NULL, due integer NOT NULL,
-      ivl integer NOT NULL, factor integer NOT NULL, reps integer NOT NULL,
-      lapses integer NOT NULL, left integer NOT NULL, odue integer NOT NULL,
-      odid integer NOT NULL, flags integer NOT NULL, data text NOT NULL
-    )`);
-    db.run(`CREATE TABLE revlog (
-      id integer PRIMARY KEY, cid integer NOT NULL, usn integer NOT NULL,
-      ease integer NOT NULL, ivl integer NOT NULL, lastIvl integer NOT NULL,
-      factor integer NOT NULL, time integer NOT NULL, type integer NOT NULL
-    )`);
+    db.run(`CREATE TABLE col (id integer PRIMARY KEY, crt integer NOT NULL, mod integer NOT NULL, scm integer NOT NULL, ver integer NOT NULL, dty integer NOT NULL, usn integer NOT NULL, ls integer NOT NULL, conf text NOT NULL, models text NOT NULL, decks text NOT NULL, dconf text NOT NULL, tags text NOT NULL)`);
+    db.run(`CREATE TABLE notes (id integer PRIMARY KEY, guid text NOT NULL, mid integer NOT NULL, mod integer NOT NULL, usn integer NOT NULL, tags text NOT NULL, flds text NOT NULL, sfld text NOT NULL, csum integer NOT NULL, flags integer NOT NULL, data text NOT NULL)`);
+    db.run(`CREATE TABLE cards (id integer PRIMARY KEY, nid integer NOT NULL, did integer NOT NULL, ord integer NOT NULL, mod integer NOT NULL, usn integer NOT NULL, type integer NOT NULL, queue integer NOT NULL, due integer NOT NULL, ivl integer NOT NULL, factor integer NOT NULL, reps integer NOT NULL, lapses integer NOT NULL, left integer NOT NULL, odue integer NOT NULL, odid integer NOT NULL, flags integer NOT NULL, data text NOT NULL)`);
+    db.run(`CREATE TABLE revlog (id integer PRIMARY KEY, cid integer NOT NULL, usn integer NOT NULL, ease integer NOT NULL, ivl integer NOT NULL, lastIvl integer NOT NULL, factor integer NOT NULL, time integer NOT NULL, type integer NOT NULL)`);
     db.run(`CREATE TABLE graves (usn integer NOT NULL, oid integer NOT NULL, type integer NOT NULL)`);
 
+    // Swap Definition logic in Anki Back Template with reveal mechanism
     const model = { [modelId]: {
       id: String(modelId), name: 'German Vocab', type: 0, mod: now, usn: -1, sortf: 2, did: deckId,
-      tmpls: [{ name: 'Recognition', ord: 0, qfmt: `<div class='front'>{{Image}}</div>`, afmt: `<div class='front'>{{Image}}</div><div class='back'><div class='article {{Article}}'>{{Article}}</div><div class='word'>{{Word}}</div><div class='pos'>{{Part_of_Speech}}</div><div class='forms'>{{Forms}}</div><div class='definition'>{{Definition_EN}}</div><div class='definition-de'>{{Definition_DE}}</div><hr><div class='sentence'>{{Sentence_DE}}</div><div class='translation'>{{Sentence_EN}}</div><div class='audio-row'><div style='position:relative; display:inline-flex; align-items:center;'>{{#Audio}}{{Audio}}{{/Audio}}{{^Audio}}<button class='speak-btn' onclick="var u=new SpeechSynthesisUtterance('{{Word}}');u.lang='de-DE';speechSynthesis.speak(u)">▶ Hear it</button><span style='position:absolute; left:calc(100% + 8px); font-size:10px; color:#888; font-family:monospace; white-space:nowrap;'>(TTS)</span>{{/Audio}}</div></div></div>` }],
+      tmpls: [{ name: 'Recognition', ord: 0, qfmt: `<div class='front'>{{Image}}</div>`, afmt: `
+        <div class='front'>{{Image}}</div>
+        <div class='back'>
+          <div class='article {{Article}}'>{{Article}}</div>
+          <div class='word'>{{Word}}</div>
+          <div class='pos'>{{Part_of_Speech}}</div>
+          <div class='forms'>{{Forms}}</div>
+          <div class='definition-de'>{{Definition_DE}}</div>
+          <div class='definition blur-reveal' onclick="this.classList.toggle('revealed')">{{Definition_EN}}</div>
+          <hr>
+          <div class='sentence'>{{Sentence_DE}}</div>
+          <div class='translation blur-reveal' onclick="this.classList.toggle('revealed')">{{Sentence_EN}}</div>
+          <div class='audio-row'>
+            <div style='position:relative; display:inline-flex; align-items:center;'>
+              {{#Audio}}{{Audio}}{{/Audio}}
+              {{^Audio}}
+                <button class='speak-btn' onclick="var u=new SpeechSynthesisUtterance('{{Word}}');u.lang='de-DE';speechSynthesis.speak(u)">▶ Hear it</button>
+                <span style='position:absolute; left:calc(100% + 8px); font-size:10px; color:#888; font-family:monospace; white-space:nowrap;'>(TTS)</span>
+              {{/Audio}}
+            </div>
+          </div>
+        </div>` 
+      }],
       flds: ['Image','Article','Word','Part_of_Speech','Forms','Audio','Sentence_DE','Sentence_EN','Definition_EN','Definition_DE'].map((n,i)=>({name:n, ord:i, sticky:false, rtl:false, font:'Arial', size:20, media:[]})),
-      css: `.card{font-family:Helvetica;text-align:center;background:#1a1a1a;color:#f0e8d8}.back{padding:16px;display:flex;flex-direction:column;min-height:200px}.word{font-size:36px;font-family:Georgia}.article.der{color:#e05c5c}.article.die{color:#5ca8e0}.article.das{color:#5ce09a}.pos{font-size:10px;color:#777;text-transform:uppercase}.forms{font-style:italic;color:#aaa;font-size:13px}.audio-row{margin-top:20px;display:flex;justify-content:center;width:100%;padding-top:12px}.replay-button,.speak-btn{display:inline-flex;align-items:center;justify-content:center;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.3);border-radius:20px;padding:5px 14px;color:#c9a84c;font-size:13px;cursor:pointer;text-decoration:none;margin:0;font-family:Helvetica}.replay-button svg{display:none}.replay-button::before{content:"▶ Hear it"}.definition{font-weight:bold;margin:8px 0}.definition-de{font-size:12px;color:#888}.sentence{margin-top:12px;font-size:15px;line-height:1.6}.translation{font-size:12px;color:#888}`,
+      css: `
+        .card{font-family:Helvetica;text-align:center;background:#1a1a1a;color:#f0e8d8}
+        .back{padding:16px;display:flex;flex-direction:column;min-height:200px}
+        .word{font-size:36px;font-family:Georgia}
+        .article.der{color:#e05c5c}
+        .article.die{color:#5ca8e0}
+        .article.das{color:#5ce09a}
+        .pos{font-size:10px;color:#777;text-transform:uppercase}
+        .forms{font-style:italic;color:#aaa;font-size:13px}
+        .audio-row{margin-top:20px;display:flex;justify-content:center;width:100%;padding-top:12px}
+        .replay-button,.speak-btn{display:inline-flex;align-items:center;justify-content:center;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.3);border-radius:20px;padding:5px 14px;color:#c9a84c;font-size:13px;cursor:pointer;text-decoration:none;margin:0;font-family:Helvetica}
+        .replay-button svg{display:none}
+        .replay-button::before{content:"▶ Hear it"}
+        .definition-de{font-weight:bold;margin:8px 0;font-size:14px}
+        .definition{font-size:12px;color:#888;margin-bottom:8px}
+        .blur-reveal{filter:blur(12px);transition:filter 0.2s ease;cursor:pointer}
+        .revealed{filter:blur(0)}
+        .sentence{margin-top:12px;font-size:15px;line-height:1.6}
+        .translation{font-size:12px;color:#888}`,
     }};
 
     const deckObj = {
-      [String(deckId)]: {
-        id: deckId, name: 'German Vocab', conf: 1, desc: '', dyn: 0, collapsed: false,
-        mod: now, usn: -1, lrnToday:[0,0], revToday:[0,0], newToday:[0,0], timeToday:[0,0],
-        extendNew: 10, extendRev: 50
-      },
-      '1': {
-        id: 1, name: 'Default', conf: 1, desc: '', dyn: 0, collapsed: false,
-        mod: now, usn: -1, lrnToday:[0,0], revToday:[0,0], newToday:[0,0], timeToday:[0,0],
-        extendNew: 10, extendRev: 50
-      }
+      [String(deckId)]: { id: deckId, name: 'German Vocab', conf: 1, desc: '', dyn: 0, collapsed: false, mod: now, usn: -1, lrnToday:[0,0], revToday:[0,0], newToday:[0,0], timeToday:[0,0], extendNew: 10, extendRev: 50 },
+      '1': { id: 1, name: 'Default', conf: 1, desc: '', dyn: 0, collapsed: false, mod: now, usn: -1, lrnToday:[0,0], revToday:[0,0], newToday:[0,0], timeToday:[0,0], extendNew: 10, extendRev: 50 }
     };
 
-    const dconf = { '1': {
-      id: 1, name: 'Default', replayq: true, timer: 0, maxTaken: 60, usn: 0, mod: 0, autoplay: true,
-      new:   { delays:[1,10], ints:[1,4,7], initialFactor:2500, separate:true, order:1, perDay:20, bury:false },
-      lapse: { delays:[10], leechFails:8, leechAction:0, mult:0, minInt:1 },
-      rev:   { perDay:200, ease4:1.3, fuzz:0.05, minSpace:1, ivlFct:1, maxIvl:36500, bury:false }
-    }};
+    const dconf = { '1': { id: 1, name: 'Default', replayq: true, timer: 0, maxTaken: 60, usn: 0, mod: 0, autoplay: true, new: { delays:[1,10], ints:[1,4,7], initialFactor:2500, separate:true, order:1, perDay:20, bury:false }, lapse: { delays:[10], leechFails:8, leechAction:0, mult:0, minInt:1 }, rev: { perDay:200, ease4:1.3, fuzz:0.05, minSpace:1, ivlFct:1, maxIvl:36500, bury:false } }};
 
-    const conf = {
-      nextPos:1, estTimes:true, activeDecks:[1], sortType:'noteFld',
-      timeLim:0, sortBackwards:false, addToCur:true, curDeck:String(deckId),
-      newBury:true, newSpread:0, dueCounts:true, curModel:String(modelId), collapseTime:1200
-    };
-
-    db.run(`INSERT INTO col VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, [
-      1, now, now, now, 11, 0, -1, 0,
-      JSON.stringify(conf), JSON.stringify(model),
-      JSON.stringify(deckObj), JSON.stringify(dconf), '{}'
-    ]);
+    db.run(`INSERT INTO col VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, [1, now, now, now, 11, 0, -1, 0, '{}', JSON.stringify(model), JSON.stringify(deckObj), JSON.stringify(dconf), '{}']);
 
     for (let i=0; i<deck.length; i++) {
       const c = deck[i];
       const sep = '\x1f';
-      const flds = [
-        imageField[c.id] || '', 
-        c.gender || '', 
-        c.word || '', 
-        c.pos || '', 
-        c.formsStr || '', 
-        audioField[c.id] || '', 
-        c.sentDE || '', 
-        c.sentEN || '', 
-        c.definition || '', 
-        c.definitionDE || ''
-      ].join(sep);
+      const flds = [imageField[c.id]||'', c.gender||'', c.word||'', c.pos||'', c.formsStr||'', audioField[c.id]||'', c.sentDE||'', c.sentEN||'', c.definition||'', c.definitionDE||''].join(sep);
       const tags = c.gender ? ` ${c.gender} ` : ' ';
       db.run(`INSERT INTO notes VALUES (?,?,?,?,?,?,?,?,?,?,?)`, [now*1000+i, Math.random().toString(36), modelId, now, -1, tags, flds, c.word, strHash(c.word||''), 0, '']);
       db.run(`INSERT INTO cards VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [now*1000+i+500000, now*1000+i, deckId, 0, now, -1, 0, 0, i+1, 0, 0, 0, 0, 0, 0, 0, 0, '']);
@@ -1717,16 +1745,11 @@ async function exportApkg() {
     const zip = new JSZip();
     zip.file('collection.anki2', db.export());
     zip.file('media', JSON.stringify(mediaJson));
-    for (const [idx, blob] of Object.entries(mediaBlobs)) {
-      zip.file(idx, blob);
-    }
+    for (const [idx, blob] of Object.entries(mediaBlobs)) { zip.file(idx, blob); }
     const blob = await zip.generateAsync({ type: 'blob' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'german.apkg'; a.click();
     toast('Export successful!', 'success');
-  } catch(e) { 
-    console.error(e);
-    toast('Export failed.', 'error'); 
-  }
+  } catch(e) { console.error(e); toast('Export failed.', 'error'); }
 }
 
 function strHash(str) {
@@ -1746,7 +1769,6 @@ function clearCard() {
   document.getElementById('definitionDEInput').value = '';
   document.getElementById('imageGrid').innerHTML = '';
   document.getElementById('audioList').innerHTML = '';
-  // Always visible but reset state
   document.getElementById('previewTTS').style.display = 'block';
   selectedImage = null;
   selectedAudio = null;
