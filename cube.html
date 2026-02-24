@@ -6,94 +6,91 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <style type="text/css">
         body {
-            font-family: "Helvetica Neue", "Helvetica";
-
-            /* WIP: Use babel or whatever the equivalent is for CSS */
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            font-family: "Iowan Old Style", "Apple Garamond", "Baskerville", "Times New Roman", "Droid Serif", Times, "Source Serif Pro", serif;
+            color: #ffffff;
+            text-rendering: optimizeLegibility;
+            -webkit-font-smoothing: antialiased;
+            overflow: hidden;
+            
             -webkit-touch-callout: none;
             -webkit-user-select: none;
-            -khtml-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
             user-select: none;
-
             -webkit-tap-highlight-color: rgba(0,0,0,0);
+            transition: background-color 0.2s ease, color 0.2s ease;
         }
-        html,body {
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            position: absolute;
-            top: 0;
-            left: 0;
 
-            overflow: hidden;
+        /* States - Balanced middle-ground colors: distinct but muted */
+        body.state_stopped { background-color: #121212; color: #d1d1d1; }
+        body.state_waiting { 
+            background-color: #705a10; 
+            color: #ffffff;
+            animation: waiting-fade var(--ready-threshold) linear;
         }
-        body.state_stopped {
-            background-color: #EE9944;
+        body.state_ready { 
+            background-color: #1b4f21; 
+            color: #ffffff;
+            animation: ready-flash 800ms infinite;
         }
-        body.state_waiting {
-            background-color: #E1D064;
+        body.state_timing { background-color: #143d59; color: #ffffff; }
 
-            animation-duration: var(--ready-threshold);
-            animation-name: waiting-fade;
-            animation-timing-function: linear;
-        }
         @keyframes waiting-fade {
-            from {
-                background-color: #E1D064;
-            }
-            to {
-                background-color: #77FF66;
-            }
-        }
-        body.state_ready {
-            background-color: #77FF66;
-
-            animation-name: ready-flash;
-            animation-duration: 800ms;
-            animation-iteration-count: infinite;
-
+            from { background-color: #705a10; }
+            to { background-color: #1b4f21; }
         }
         @keyframes ready-flash {
-            from, 40% {
-                background-color: #77FF66;
-            }
-            20% {
-                background-color: #AAFF99;
-            }
-        }    
-        body.state_timing {
-            background-color: #7799FF;
-        }
-        #durations {
-            margin-top: 30vh;
-            text-align: center;
-        }
-        #durations .duration {
-            padding: 10px 0;
-        }
-        #nux {
-            min-width: 100pt;
-            max-width: 400pt;
-            margin: 20vh auto;
-            padding: 20pt;
-            text-align: center;
-        }
-        .nux_title, #durations {
-            color: white;
-        }
-        .nux_title {
-            font-size: 50pt;
+            from, 40% { background-color: #1b4f21; }
+            20% { background-color: #2b6b30; }
         }
 
-        /* WIP: Get rid of diag stuff before publishing */
-        #diag {
+        main {
+            padding-left: 15vw;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+        }
+
+        /* Typographic Bar */
+        main::before {
+            content: "";
+            width: 40px;
+            height: 1px;
+            background: currentColor;
+            margin-bottom: 24px;
+            opacity: 0.5;
+        }
+
+        /* Hide bar instantly during timing */
+        body.state_timing main::before {
             display: none;
         }
+
+        #nux {
+            font-size: 1.15rem;
+            line-height: 1.5;
+        }
+
+        #durations {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .duration {
+            line-height: 1.2;
+        }
+
+        @media (max-width: 600px) {
+            main { padding-left: 10vw; }
+        }
+
+        #diag { display: none; }
     </style>
     <script type="text/javascript">
-        // Constants
-        // WIP: naming?
         var STATES = {
             STOPPED : {name: 'STOPPED', class: 'state_stopped'},
             WAITING : {name: 'WAITING', class: 'state_waiting'},
@@ -101,163 +98,104 @@
             TIMING : {name: 'TIMING', class: 'state_timing'},
         };
         var READY_THRESHOLD_MS = 1000;
-        // WIP: Is there a better way to have a single source of truth for this value?
-        document.documentElement.style.setProperty(
-            '--ready-threshold',
-            `${READY_THRESHOLD_MS}ms`
-        );
+        document.documentElement.style.setProperty('--ready-threshold', `${READY_THRESHOLD_MS}ms`);
 
         var DISPLAY_DURATIONS = 4;
         var durationHistory = [];
+        var waitingTimerHandle, currentState, startTime, stopTime, keyIsDown;
 
-        // State variables
-        var waitingTimerHandle;
-        var currentState;
-        var startTime;
-        var stopTime;
-        var keyIsDown; // for debouncing
-
-        // Functions
         function setState(state) {
-            if (state == currentState)
-                return;
+            if (state == currentState) return;
 
-            var finishedTiming = false;
-
+            var finishedTiming = (state == STATES.STOPPED && currentState == STATES.TIMING);
             var nuxElement = document.getElementById('nux');
             var durationsElement = document.getElementById('durations');
 
-            var nuxText = '';
-            switch (state) {
-                case STATES.STOPPED:
-                    finishedTiming = currentState == STATES.TIMING;
-                    if (waitingTimerHandle) {
-                        clearTimeout(waitingTimerHandle);
-                        waitingTimerHandle = null;
-                    }
-                    nuxText = 'Cubing Timer';
-                    break;
-                case STATES.WAITING:
-                    waitingTimerHandle = setTimeout(() => setState(STATES.READY), READY_THRESHOLD_MS);
+            if (waitingTimerHandle) {
+                clearTimeout(waitingTimerHandle);
+                waitingTimerHandle = null;
+            }
 
-                    nuxText = 'Hold...';
+            let nuxText = '';
+            switch (state) {
+                case STATES.STOPPED: nuxText = 'Click or Space'; break;
+                case STATES.WAITING: 
+                    waitingTimerHandle = setTimeout(() => setState(STATES.READY), READY_THRESHOLD_MS);
+                    nuxText = 'Hold...'; 
                     break;
-                case STATES.READY:
-                    nuxText = 'Release!';
-                    break;
-                case STATES.TIMING:
-                    nuxText = '';
-                    break;
+                case STATES.READY: nuxText = 'Release!'; break;
+                case STATES.TIMING: nuxText = ''; break;
             }
             nuxElement.innerText = nuxText;
 
-            if (currentState) {
-                document.body.classList.remove(currentState.class);
-            }
+            if (currentState) document.body.classList.remove(currentState.class);
             document.body.classList.add(state.class);
             currentState = state;
 
             if (finishedTiming) {
                 var durationSeconds = (stopTime - startTime) / 1000;
                 durationHistory.push(durationSeconds);
-
-                // Display durations
-                var newDurationsElement = durationsElement.cloneNode(false);
-                durationsElement.parentNode.replaceChild(newDurationsElement, durationsElement);
-                durationsElement = newDurationsElement;
-                for (var i = 0; i < Math.min(durationHistory.length, DISPLAY_DURATIONS); i++) {
-                    var d = durationHistory[durationHistory.length - 1 - i];
-                    var durationElement = document.createElement('div');
-                    durationElement.classList.add('duration');
-                    durationElement.innerText = d.toFixed(3);
-
-                    var fontSize = 90 - 20 * i;
-                    durationElement.style.fontSize = `${fontSize}pt`;
-
-                    var fontWeight = i == 0 ? 'bold' : '';
-                    durationElement.style.fontWeight = fontWeight;
-
-                    durationsElement.appendChild(durationElement);
-                }
+                updateHistoryUI();
             }
 
-            var firstRun = !stopTime;
-            durationsElement.hidden = state != STATES.STOPPED;
-            nuxElement.hidden = !firstRun;
+            var firstRun = durationHistory.length === 0;
+            durationsElement.style.display = (state == STATES.STOPPED && !firstRun) ? 'flex' : 'none';
+            nuxElement.style.display = (state != STATES.STOPPED || firstRun) ? 'block' : 'none';
         }
 
-        // WIP: hack to debounce lifting finger from touch screen
+        function updateHistoryUI() {
+            const container = document.getElementById('durations');
+            container.innerHTML = '';
+            for (var i = 0; i < Math.min(durationHistory.length, DISPLAY_DURATIONS); i++) {
+                var d = durationHistory[durationHistory.length - 1 - i];
+                var el = document.createElement('div');
+                el.classList.add('duration');
+                el.innerText = d.toFixed(3);
+                
+                var size = 1.15 + (i === 0 ? 0.2 : - (i * 0.1));
+                el.style.fontSize = `${size}rem`;
+                el.style.opacity = 1 - (i * 0.2);
+                
+                container.appendChild(el);
+            }
+        }
+
         var DEBOUNCE_TIME_MS = 100;
         var lastDownTime = 0;
 
-        // WIP: might be good to have a delay before entering the waiting
-        // state to allow for scrolling. If scroll happens during delay, don't
-        // consider the touch down
-        function down() {
-            diag('down');
+        function down(e) {
+            if (e.type === 'touchstart') e.preventDefault();
             var now = Date.now();
-            if (now - lastDownTime < DEBOUNCE_TIME_MS) {
-                return;
-            }
-            lastDownTime = Date.now();
-            switch (currentState) {
-                case STATES.STOPPED:
-                setState(STATES.WAITING);
-                break;
-                case STATES.TIMING:
+            if (now - lastDownTime < DEBOUNCE_TIME_MS) return;
+            lastDownTime = now;
+
+            if (currentState == STATES.STOPPED) setState(STATES.WAITING);
+            else if (currentState == STATES.TIMING) {
                 stopTime = now;
                 setState(STATES.STOPPED);
-                break;
             }
         }
 
         function up() {
-            diag('up');
-            switch (currentState) {
-                case STATES.READY:
+            if (currentState == STATES.READY) {
                 startTime = Date.now();
                 setState(STATES.TIMING);
-                break;
-                case STATES.WAITING:
-                setState(STATES.STOPPED);
-                break;
-            }
-        }
-
-        function keyDown(event) {
-            if (event.key == ' ') {
-                if (!keyIsDown) {
-                    down();
-                    keyIsDown = true;
-                }
-                event.preventDefault();
-            }
-        }
-
-        function keyUp(event) {
-            if (event.key == ' ') {
-                if (keyIsDown) {
-                    up();
-                    keyIsDown = false;
-                }
-                event.preventDefault();
-            } else if (event.keyCode == 27) { // esc
+            } else if (currentState == STATES.WAITING) {
                 setState(STATES.STOPPED);
             }
-        }
-
-        function diag(s) {
-            var el = document.getElementById('diag');
-            el.innerText = s + '\n' + el.innerText;
         }
 
         window.onload = () => {
-            document.addEventListener('mousedown', down);
-            document.addEventListener('mouseup', up);
-            document.addEventListener('touchstart', down);
-            document.addEventListener('touchend', up);
-            document.addEventListener('keydown', keyDown);
-            document.addEventListener('keyup', keyUp);
+            const events = [['mousedown', down], ['mouseup', up], ['touchstart', down], ['touchend', up]];
+            events.forEach(ev => document.addEventListener(ev[0], ev[1], {passive: false}));
+            
+            document.addEventListener('keydown', e => {
+                if (e.key === ' ' && !keyIsDown) { down(e); keyIsDown = true; }
+            });
+            document.addEventListener('keyup', e => {
+                if (e.key === ' ') { up(); keyIsDown = false; }
+                if (e.key === 'Escape') setState(STATES.STOPPED);
+            });
 
             setState(STATES.STOPPED);
         };
@@ -265,9 +203,9 @@
 </head>
 <body>
     <div id="diag"></div>
-    <div id="nux" class="nux_title">
-        Cubing Timer
-    </div>
-    <div id="durations" class="centered_text"></div>
+    <main>
+        <div id="nux">Timer</div>
+        <div id="durations"></div>
+    </main>
 </body>
 </html>
