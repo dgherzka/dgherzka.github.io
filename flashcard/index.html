@@ -450,10 +450,10 @@
   }
   .card-divider { border: none; border-top: 1px solid #333333; margin: 10px 0; width: 100%; }
   .card-sentence { font-size: 15px; color: #f0e8d8; line-height: 1.6; margin: 10px 0 4px; text-align: center; }
-  
+
   /* Blurring logic */
   .blur-reveal {
-    filter: blur(12px);
+    filter: blur(6px);
     transition: filter 0.2s ease;
     cursor: pointer;
     user-select: none;
@@ -925,20 +925,23 @@
           <div class="card-half-label">back</div>
           <div class="card-back-body">
             <div class="card-article" id="previewArticle"></div>
-            <div class="card-word" id="previewWord">—</div>
+            <div class="card-word" id="previewWord"></div>
             <div class="card-plural" id="previewPlural"></div>
+
             <div class="card-definition-primary" id="previewDefinitionDE"></div>
-            <div class="card-definition-secondary blur-reveal" id="previewDefinitionEN" 
+            <div class="card-definition-secondary blur-reveal" id="previewDefinitionEN"
               onmousedown="handleRevealStart(this)" onmouseup="handleRevealEnd(this)"
               ontouchstart="handleRevealStart(this)" ontouchend="handleRevealEnd(this)"></div>
+
             <hr class="card-divider" id="previewDivider" style="display:none;" />
             <div class="card-sentence" id="previewSentDE"></div>
             <div class="card-translation blur-reveal" id="previewSentEN"
               onmousedown="handleRevealStart(this)" onmouseup="handleRevealEnd(this)"
               ontouchstart="handleRevealStart(this)" ontouchend="handleRevealEnd(this)"></div>
+
             <div class="card-footer">
               <div style="position:relative; display:inline-flex; align-items:center; justify-content:center;">
-                <button class="card-audio-btn" id="previewAudioBtn" onclick="playSelectedAudio()">
+                <button class="card-audio-btn" id="previewAudioBtn" onclick="playSelectedAudio()" style="display:none;">
                   ▶ Hear it
                 </button>
                 <span id="previewTTS" style="display:none; position:absolute; left:calc(100% + 8px); font-size:10px; color:#888888; font-family:var(--font-mono); white-space:nowrap;">(TTS)</span>
@@ -1210,7 +1213,7 @@ async function generateDefinitions(pArg) {
   const article = p.gender ? p.gender + ' ' : '';
   const btn = document.getElementById('defBtn');
   if (btn) { btn.innerHTML = '<span class="spinner"></span>'; btn.disabled = true; }
-  
+
   try {
     // English Dictionary Definition
     const resEN = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1495,7 +1498,9 @@ function updatePreview() {
   const sentDE = document.getElementById('sentDE').value.trim();
   const sentEN = document.getElementById('sentEN').value.trim();
 
-  document.getElementById('previewWord').textContent = p.word || '—';
+  const hasWord = !!p.word;
+
+  document.getElementById('previewWord').textContent = p.word || '';
   const artEl = document.getElementById('previewArticle');
   artEl.textContent = p.gender || '';
   artEl.className = 'card-article ' + (p.gender || '');
@@ -1520,7 +1525,7 @@ function updatePreview() {
   const tag = document.getElementById('previewGenderTag');
   tag.textContent = p.pos ? `#${p.pos}${p.gender ? ' #'+p.gender : ''}` : '';
 
-  if (selectedImage) {
+  if (selectedImage && hasWord) {
     document.getElementById('previewImg').src = selectedImage.url;
     document.getElementById('previewImg').style.display = 'block';
     document.getElementById('previewImgPlaceholder').style.display = 'none';
@@ -1529,10 +1534,10 @@ function updatePreview() {
     document.getElementById('previewImgPlaceholder').style.display = 'flex';
   }
 
-  // Always show audio button in preview
+  // Audio button in preview
   const hasRecording = selectedAudio && selectedAudio.hasAudio;
-  document.getElementById('previewAudioBtn').style.display = 'flex';
-  document.getElementById('previewTTS').style.display = hasRecording ? 'none' : 'block';
+  document.getElementById('previewAudioBtn').style.display = hasWord ? 'flex' : 'none';
+  document.getElementById('previewTTS').style.display = (hasWord && !hasRecording) ? 'block' : 'none';
 }
 
 let editingId = null;
@@ -1676,7 +1681,7 @@ async function exportApkg() {
     db.run(`CREATE TABLE revlog (id integer PRIMARY KEY, cid integer NOT NULL, usn integer NOT NULL, ease integer NOT NULL, ivl integer NOT NULL, lastIvl integer NOT NULL, factor integer NOT NULL, time integer NOT NULL, type integer NOT NULL)`);
     db.run(`CREATE TABLE graves (usn integer NOT NULL, oid integer NOT NULL, type integer NOT NULL)`);
 
-    // Swap Definition logic in Anki Back Template with reveal mechanism
+    // Anki Back Template with reveal mechanism
     const model = { [modelId]: {
       id: String(modelId), name: 'German Vocab', type: 0, mod: now, usn: -1, sortf: 2, did: deckId,
       tmpls: [{ name: 'Recognition', ord: 0, qfmt: `<div class='front'>{{Image}}</div>`, afmt: `
@@ -1700,7 +1705,7 @@ async function exportApkg() {
               {{/Audio}}
             </div>
           </div>
-        </div>` 
+        </div>`
       }],
       flds: ['Image','Article','Word','Part_of_Speech','Forms','Audio','Sentence_DE','Sentence_EN','Definition_EN','Definition_DE'].map((n,i)=>({name:n, ord:i, sticky:false, rtl:false, font:'Arial', size:20, media:[]})),
       css: `
@@ -1718,7 +1723,7 @@ async function exportApkg() {
         .replay-button::before{content:"▶ Hear it"}
         .definition-de{font-weight:bold;margin:8px 0;font-size:14px}
         .definition{font-size:12px;color:#888;margin-bottom:8px}
-        .blur-reveal{filter:blur(12px);transition:filter 0.2s ease;cursor:pointer}
+        .blur-reveal{filter:blur(6px);transition:filter 0.2s ease;cursor:pointer}
         .revealed{filter:blur(0)}
         .sentence{margin-top:12px;font-size:15px;line-height:1.6}
         .translation{font-size:12px;color:#888}`,
@@ -1769,7 +1774,6 @@ function clearCard() {
   document.getElementById('definitionDEInput').value = '';
   document.getElementById('imageGrid').innerHTML = '';
   document.getElementById('audioList').innerHTML = '';
-  document.getElementById('previewTTS').style.display = 'block';
   selectedImage = null;
   selectedAudio = null;
   updatePreview();
