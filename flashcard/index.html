@@ -1178,7 +1178,9 @@ async function parseEntry(raw) {
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 250,
         messages: [{ role: 'user', content:
-`Parse this vocabulary entry and return ONLY a JSON object, no markdown:
+`Parse this vocabulary query and return ONLY a JSON object, no markdown. This is a description of a vocabulary item. It may be a German word or a query to find an unknown word. Look up the most common German translation of the English word if the input is in English.
+
+The query is:
 "${raw}"
 
 {
