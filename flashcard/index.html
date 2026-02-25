@@ -745,6 +745,8 @@
     flex-wrap: wrap;
   }
 
+  .mobile-deck-actions { display: none; }
+
   /* ── Responsive Design ── */
   @media (max-width: 950px) {
     .app {
@@ -760,6 +762,14 @@
     }
     .right-panel {
       overflow: visible;
+    }
+    .desktop-deck-actions { display: none; }
+    .mobile-deck-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 24px 32px;
+      border-bottom: 1px solid var(--border);
     }
   }
 
@@ -778,6 +788,9 @@
       padding: 20px;
     }
     .preview-area {
+      padding: 20px;
+    }
+    .mobile-deck-actions {
       padding: 20px;
     }
     .card-pair {
@@ -894,11 +907,13 @@
       <div class="feedback-box" id="feedbackBox"></div>
     </div>
 
-    <hr class="divider" />
+    <hr class="divider desktop-deck-actions" />
 
     <!-- Add to deck -->
-    <button class="btn btn-primary" id="addBtn" onclick="addToDeck()" style="width:100%;">+ Add to Deck</button>
-    <button class="btn" id="cancelEditBtn" onclick="cancelEdit()" style="width:100%;display:none;">✕ Cancel Edit</button>
+    <div class="desktop-deck-actions">
+      <button class="btn btn-primary add-to-deck-btn" id="addBtn" onclick="addToDeck()" style="width:100%;">+ Add to Deck</button>
+      <button class="btn cancel-edit-btn" id="cancelEditBtn" onclick="cancelEdit()" style="width:100%;display:none;">✕ Cancel Edit</button>
+    </div>
 
   </div>
 
@@ -952,6 +967,12 @@
         </div>
 
       </div>
+    </div>
+
+    <!-- Add to deck (mobile only) -->
+    <div class="mobile-deck-actions">
+      <button class="btn btn-primary add-to-deck-btn" onclick="addToDeck()" style="width:100%;">+ Add to Deck</button>
+      <button class="btn cancel-edit-btn" onclick="cancelEdit()" style="width:100%;display:none;">✕ Cancel Edit</button>
     </div>
 
     <!-- Deck -->
@@ -1619,15 +1640,15 @@ function editCard(id) {
   document.getElementById('definitionDEInput').value = card.definitionDE || '';
   selectedImage = card.imageUrl ? { url: card.imageUrl } : null;
   selectedAudio = card.hasAudio ? { url: card.audioUrl, filename: card.audioFile, hasAudio: true } : null;
-  document.getElementById('addBtn').textContent = '✓ Replace Card';
-  document.getElementById('cancelEditBtn').style.display = '';
+  document.querySelectorAll('.add-to-deck-btn').forEach(el => el.textContent = '✓ Replace Card');
+  document.querySelectorAll('.cancel-edit-btn').forEach(el => el.style.display = '');
   updatePreview();
 }
 
 function cancelEdit() {
   editingId = null;
-  document.getElementById('addBtn').textContent = '+ Add to Deck';
-  document.getElementById('cancelEditBtn').style.display = 'none';
+  document.querySelectorAll('.add-to-deck-btn').forEach(el => el.textContent = '+ Add to Deck');
+  document.querySelectorAll('.cancel-edit-btn').forEach(el => el.style.display = 'none');
   clearCard();
 }
 
