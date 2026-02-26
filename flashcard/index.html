@@ -1004,9 +1004,9 @@
       <option value="pixabay">Pixabay – photo search</option>
       <option value="unsplash">Unsplash – photo search</option>
       <option value="pexels">Pexels – photo search</option>
-      <option value="replicate">Replicate – AI (flux-schnell)</option>
-      <option value="openai">GPT Image 1 – AI (OpenAI)</option>
-      <option value="gemini">Nano Banana – AI (Gemini Flash)</option>
+      <option value="replicate" disabled>Replicate – AI (flux-schnell)</option>
+      <option value="openai" disabled>GPT Image 1 – AI (OpenAI)</option>
+      <option value="gemini" disabled>Nano Banana – AI (Gemini Flash)</option>
     </select>
 
     <label>Pixabay API Key <a href="https://pixabay.com/api/docs" target="_blank">Get Key ↗</a></label>
@@ -1018,14 +1018,14 @@
     <label>Pexels API Key <a href="https://www.pexels.com/api/" target="_blank">Get Key ↗</a></label>
     <input id="keyPexels" type="text" placeholder="Enter Pexels key..." />
 
-    <label>Replicate API Token <a href="https://replicate.com/account/api-tokens" target="_blank">Get Key ↗</a></label>
-    <input id="keyReplicate" type="text" placeholder="r8_…" />
+    <label style="display:none">Replicate API Token <a href="https://replicate.com/account/api-tokens" target="_blank">Get Key ↗</a></label>
+    <input id="keyReplicate" type="text" placeholder="r8_…" style="display:none" />
 
-    <label>OpenAI API Key (images) <a href="https://platform.openai.com/api-keys" target="_blank">Get Key ↗</a></label>
-    <input id="keyOpenaiImage" type="text" placeholder="sk-…" />
+    <label style="display:none">OpenAI API Key (images) <a href="https://platform.openai.com/api-keys" target="_blank">Get Key ↗</a></label>
+    <input id="keyOpenaiImage" type="text" placeholder="sk-…" style="display:none" />
 
-    <label>Gemini API Key <a href="https://aistudio.google.com/app/apikey" target="_blank">Get Key ↗</a></label>
-    <input id="keyGemini" type="text" placeholder="AIza…" />
+    <label style="display:none">Gemini API Key <a href="https://aistudio.google.com/app/apikey" target="_blank">Get Key ↗</a></label>
+    <input id="keyGemini" type="text" placeholder="AIza…" style="display:none" />
 
     <label>Anthropic API Key <a href="https://console.anthropic.com/settings/keys" target="_blank">Get Key ↗</a></label>
     <input id="keyAnthropic" type="text" placeholder="sk-ant-…" />
@@ -2023,8 +2023,8 @@ async function exportApkg() {
       const sep = '\x1f';
       const flds = [imageField[c.id]||'', c.gender||'', c.word||'', c.pos||'', c.formsStr||'', audioField[c.id]||'', c.sentDE||'', c.sentEN||'', c.definition||'', c.definitionDE||''].join(sep);
       const tags = c.gender ? ` ${c.gender} ` : ' ';
-      db.run(`INSERT INTO notes VALUES (?,?,?,?,?,?,?,?,?,?,?)`, [now*1000+i, Math.random().toString(36), modelId, now, -1, tags, flds, c.word, strHash(c.word||''), 0, '']);
-      db.run(`INSERT INTO cards VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [now*1000+i+500000, now*1000+i, deckId, 0, now, -1, 0, 0, i+1, 0, 0, 0, 0, 0, 0, 0, 0, '']);
+      db.run(`INSERT INTO notes VALUES (?,?,?,?,?,?,?,?,?,?,?)`, [c.id, c.id.toString(36), modelId, now, -1, tags, flds, c.word, strHash(c.word||''), 0, '']);
+      db.run(`INSERT INTO cards VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [c.id + 1, c.id, deckId, 0, now, -1, 0, 0, i+1, 0, 0, 0, 0, 0, 0, 0, 0, '']);
     }
 
     const zip = new JSZip();
