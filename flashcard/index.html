@@ -867,13 +867,14 @@
         </select>
         <input class="small-input" id="imageQuery" placeholder="image search query…"
           onkeydown="if(event.key==='Enter') searchImages(document.getElementById('imageQuery').value.trim())" />
-        <button class="btn btn-sm" onclick="searchImages(document.getElementById('imageQuery').value.trim())">Search</button>
+        <button class="btn btn-sm" id="imageSearchBtn" onclick="searchImages(document.getElementById('imageQuery').value.trim())">Search</button>
       </div>
       <div class="image-grid" id="imageGrid">
         <div style="grid-column:1/-1;color:var(--muted);font-size:0.85rem;padding:10px 0;">
           Enter a word and click Search All.
         </div>
       </div>
+      <button class="btn btn-sm" id="imgLoadMoreBtn" onclick="loadMoreImages()" style="display:none;width:100%;margin-top:6px;">Load more</button>
     </div>
 
     <hr class="divider" />
@@ -998,8 +999,33 @@
     <h2>API Keys</h2>
     <p>Your keys are stored only in your browser's localStorage and never sent anywhere except the respective APIs.</p>
 
+    <label>Image Source</label>
+    <select id="imageProvider" class="small-input" style="width:100%;margin-bottom:12px;">
+      <option value="pixabay">Pixabay – photo search</option>
+      <option value="unsplash">Unsplash – photo search</option>
+      <option value="pexels">Pexels – photo search</option>
+      <option value="replicate">Replicate – AI (flux-schnell)</option>
+      <option value="openai">GPT Image 1 – AI (OpenAI)</option>
+      <option value="gemini">Nano Banana – AI (Gemini Flash)</option>
+    </select>
+
     <label>Pixabay API Key <a href="https://pixabay.com/api/docs" target="_blank">Get Key ↗</a></label>
     <input id="keyPixabay" type="text" placeholder="Enter Pixabay key..." />
+
+    <label>Unsplash Access Key <a href="https://unsplash.com/developers" target="_blank">Get Key ↗</a></label>
+    <input id="keyUnsplash" type="text" placeholder="Enter Unsplash access key..." />
+
+    <label>Pexels API Key <a href="https://www.pexels.com/api/" target="_blank">Get Key ↗</a></label>
+    <input id="keyPexels" type="text" placeholder="Enter Pexels key..." />
+
+    <label>Replicate API Token <a href="https://replicate.com/account/api-tokens" target="_blank">Get Key ↗</a></label>
+    <input id="keyReplicate" type="text" placeholder="r8_…" />
+
+    <label>OpenAI API Key (images) <a href="https://platform.openai.com/api-keys" target="_blank">Get Key ↗</a></label>
+    <input id="keyOpenaiImage" type="text" placeholder="sk-…" />
+
+    <label>Gemini API Key <a href="https://aistudio.google.com/app/apikey" target="_blank">Get Key ↗</a></label>
+    <input id="keyGemini" type="text" placeholder="AIza…" />
 
     <label>Anthropic API Key <a href="https://console.anthropic.com/settings/keys" target="_blank">Get Key ↗</a></label>
     <input id="keyAnthropic" type="text" placeholder="sk-ant-…" />
@@ -1038,7 +1064,13 @@ function checkUrlParams() {
 function clearStorage() {
   if (!confirm('This will delete your saved deck and API keys. Are you sure?')) return;
   localStorage.removeItem('wk_deck');
+  localStorage.removeItem('wk_image_provider');
   localStorage.removeItem('wk_pixabay');
+  localStorage.removeItem('wk_unsplash');
+  localStorage.removeItem('wk_pexels');
+  localStorage.removeItem('wk_replicate');
+  localStorage.removeItem('wk_openai_image');
+  localStorage.removeItem('wk_gemini');
   localStorage.removeItem('wk_anthropic');
   deck = [];
   renderDeck();
@@ -1048,6 +1080,8 @@ function clearStorage() {
 function saveDeck() { try { localStorage.setItem('wk_deck', JSON.stringify(deck)); } catch(e) {} }
 function loadDeck() { try { const d = localStorage.getItem('wk_deck'); if (d) deck = JSON.parse(d); } catch(e) {} }
 let selectedImage = null;
+let _imgPage = 1;
+let _imgLastQuery = '';
 let selectedAudio = null;
 let audioObjects = {};
 
@@ -1065,14 +1099,27 @@ function handleRevealEnd(el) {
 // ── Keys ──
 function getKeys() {
   return {
-    pixabay:   localStorage.getItem('wk_pixabay') || '',
-    anthropic: localStorage.getItem('wk_anthropic') || ''
+    pixabay:      localStorage.getItem('wk_pixabay') || '',
+    unsplash:     localStorage.getItem('wk_unsplash') || '',
+    pexels:       localStorage.getItem('wk_pexels') || '',
+    replicate:    localStorage.getItem('wk_replicate') || '',
+    openai_image: localStorage.getItem('wk_openai_image') || '',
+    gemini:       localStorage.getItem('wk_gemini') || '',
+    anthropic:    localStorage.getItem('wk_anthropic') || '',
+    imageProvider: localStorage.getItem('wk_image_provider') || 'pixabay',
   };
 }
+function getImageProvider() { return localStorage.getItem('wk_image_provider') || 'pixabay'; }
 
 function openSettings() {
   const k = getKeys();
+  document.getElementById('imageProvider').value = k.imageProvider;
   document.getElementById('keyPixabay').value = k.pixabay;
+  document.getElementById('keyUnsplash').value = k.unsplash;
+  document.getElementById('keyPexels').value = k.pexels;
+  document.getElementById('keyReplicate').value = k.replicate;
+  document.getElementById('keyOpenaiImage').value = k.openai_image;
+  document.getElementById('keyGemini').value = k.gemini;
   document.getElementById('keyAnthropic').value = k.anthropic;
   document.getElementById('settingsModal').classList.add('open');
 }
@@ -1080,18 +1127,26 @@ function closeSettings() {
   document.getElementById('settingsModal').classList.remove('open');
 }
 function saveSettings() {
+  localStorage.setItem('wk_image_provider', document.getElementById('imageProvider').value);
   localStorage.setItem('wk_pixabay', document.getElementById('keyPixabay').value.trim());
+  localStorage.setItem('wk_unsplash', document.getElementById('keyUnsplash').value.trim());
+  localStorage.setItem('wk_pexels', document.getElementById('keyPexels').value.trim());
+  localStorage.setItem('wk_replicate', document.getElementById('keyReplicate').value.trim());
+  localStorage.setItem('wk_openai_image', document.getElementById('keyOpenaiImage').value.trim());
+  localStorage.setItem('wk_gemini', document.getElementById('keyGemini').value.trim());
   localStorage.setItem('wk_anthropic', document.getElementById('keyAnthropic').value.trim());
   closeSettings();
   updateApiStatus();
+  updateImageSectionUI();
   toast('API keys saved!', 'success');
 }
 
 function updateApiStatus() {
   const k = getKeys();
+  const imgKey = { pixabay: k.pixabay, unsplash: k.unsplash, pexels: k.pexels, replicate: k.replicate, openai: k.openai_image, gemini: k.gemini }[k.imageProvider];
   const el = document.getElementById('api-status');
   el.innerHTML = [
-    `<span class="status-dot ${k.pixabay ? 'ok' : 'missing'}"></span><span style="font-size:0.75rem;color:var(--muted);margin-right:8px;font-family:var(--font-mono);">Images</span>`,
+    `<span class="status-dot ${imgKey ? 'ok' : 'missing'}"></span><span style="font-size:0.75rem;color:var(--muted);margin-right:8px;font-family:var(--font-mono);">Images</span>`,
     `<span class="status-dot ${k.anthropic ? 'ok' : 'missing'}"></span><span style="font-size:0.75rem;color:var(--muted);margin-right:8px;font-family:var(--font-mono);">Sentences</span>`
   ].join('');
 }
@@ -1298,22 +1353,83 @@ async function generateDefinitions(pArg) {
   if (btn) { btn.innerHTML = 'Generate'; btn.disabled = false; }
 }
 
-// ── Pixabay ──
+// ── Image search / generation ──
+function updateImageSectionUI() {
+  const provider = getImageProvider();
+  const isAI = !['pixabay', 'unsplash', 'pexels'].includes(provider);
+  document.getElementById('imageLang').style.display = isAI ? 'none' : '';
+  document.getElementById('imageSearchBtn').textContent = isAI ? 'Generate' : 'Search';
+  document.getElementById('imageQuery').placeholder = isAI ? 'image prompt…' : 'image search query…';
+}
+
 function searchImages(word) {
+  if (!word) return Promise.resolve();
+  _imgPage = 1;
+  _imgLastQuery = word;
+  document.getElementById('imgLoadMoreBtn').style.display = 'none';
+  const provider = getImageProvider();
   const k = getKeys();
-  if (!k.pixabay) { toast('Add your Pixabay key in ⚙ API Keys.', 'error'); return Promise.resolve(); }
   const grid = document.getElementById('imageGrid');
   const status = document.getElementById('img-status');
-  const lang = document.getElementById('imageLang').value;
-  grid.innerHTML = `<div style="grid-column:1/-1;padding:8px 0;"><span class="spinner"></span><span style="color:var(--muted);font-size:0.85rem;">Searching images…</span></div>`;
-  status.textContent = '';
   selectedImage = null;
+  status.textContent = '';
+
+  if (provider === 'pixabay') return _pixabaySearch(word, k, grid, status, 1, false);
+  if (provider === 'unsplash') return _unsplashSearch(word, k, grid, status, 1, false);
+  if (provider === 'pexels') return _pexelsSearch(word, k, grid, status, 1, false);
+  if (provider === 'replicate') return _replicateGenerate(word, k, grid, status);
+  if (provider === 'openai') return _openaiGenerate(word, k, grid, status);
+  if (provider === 'gemini') return _geminiGenerate(word, k, grid, status);
+  return Promise.resolve();
+}
+
+function loadMoreImages() {
+  if (!_imgLastQuery) return;
+  _imgPage++;
+  const provider = getImageProvider();
+  const k = getKeys();
+  const grid = document.getElementById('imageGrid');
+  const status = document.getElementById('img-status');
+  if (provider === 'pixabay') return _pixabaySearch(_imgLastQuery, k, grid, status, _imgPage, true);
+  if (provider === 'unsplash') return _unsplashSearch(_imgLastQuery, k, grid, status, _imgPage, true);
+  if (provider === 'pexels') return _pexelsSearch(_imgLastQuery, k, grid, status, _imgPage, true);
+}
+
+function _imgLoadMoreBtn(show) {
+  const provider = getImageProvider();
+  const isSearch = ['pixabay', 'unsplash', 'pexels'].includes(provider);
+  document.getElementById('imgLoadMoreBtn').style.display = (show && isSearch) ? '' : 'none';
+}
+
+function _imgLoading(grid, msg) {
+  grid.innerHTML = `<div style="grid-column:1/-1;padding:8px 0;"><span class="spinner"></span><span style="color:var(--muted);font-size:0.85rem;">${msg}</span></div>`;
+}
+function _imgError(grid, msg) {
+  grid.innerHTML = `<div style="grid-column:1/-1;color:var(--der);font-size:0.85rem;">${msg}</div>`;
+}
+function _imgShowSingle(grid, status, dataUrl) {
+  grid.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'image-thumb selected';
+  div.innerHTML = `<img src="${dataUrl}" alt="" /><div class="check">✓</div>`;
+  div.onclick = () => { document.querySelectorAll('.image-thumb').forEach(t => t.classList.remove('selected')); div.classList.add('selected'); selectedImage = { url: dataUrl }; updatePreview(); };
+  grid.appendChild(div);
+  selectedImage = { url: dataUrl };
+  status.textContent = 'generated';
+  updatePreview();
+}
+
+// Pixabay (JSONP search)
+function _pixabaySearch(word, k, grid, status, page, append) {
+  if (!k.pixabay) { toast('Add your Pixabay key in ⚙ API Keys.', 'error'); return Promise.resolve(); }
+  const lang = document.getElementById('imageLang').value;
+  if (!append) _imgLoading(grid, 'Searching images…');
 
   return new Promise((resolve) => {
     const cbName = '_pixabay_' + Date.now();
     const timeout = setTimeout(() => {
       delete window[cbName];
-      grid.innerHTML = `<div style="grid-column:1/-1;color:var(--der);font-size:0.85rem;">Request timed out. Check your API key.</div>`;
+      _imgError(grid, 'Request timed out. Check your API key.');
       resolve();
     }, 10000);
 
@@ -1322,11 +1438,11 @@ function searchImages(word) {
       delete window[cbName];
       script.remove();
       if (!data.hits || data.hits.length === 0) {
-        grid.innerHTML = `<div style="grid-column:1/-1;color:var(--muted);font-size:0.85rem;">No images found. Try a different word.</div>`;
+        if (!append) grid.innerHTML = `<div style="grid-column:1/-1;color:var(--muted);font-size:0.85rem;">No images found. Try a different word.</div>`;
+        _imgLoadMoreBtn(false);
         return resolve();
       }
-      status.textContent = `${data.hits.length} found`;
-      grid.innerHTML = '';
+      if (!append) grid.innerHTML = '';
       data.hits.forEach((hit) => {
         const div = document.createElement('div');
         div.className = 'image-thumb';
@@ -1334,19 +1450,133 @@ function searchImages(word) {
         div.onclick = () => selectImage(div, hit.webformatURL, hit.previewURL);
         grid.appendChild(div);
       });
+      _imgLoadMoreBtn(data.hits.length === 12);
       resolve();
     };
 
     const script = document.createElement('script');
-    script.src = `https://pixabay.com/api/?key=${k.pixabay}&q=${encodeURIComponent(word)}&image_type=photo&per_page=12&safesearch=true&lang=${lang}&callback=${cbName}`;
+    script.src = `https://pixabay.com/api/?key=${k.pixabay}&q=${encodeURIComponent(word)}&image_type=photo&per_page=12&safesearch=true&lang=${lang}&page=${page}&callback=${cbName}`;
     script.onerror = () => {
       clearTimeout(timeout);
       delete window[cbName];
-      grid.innerHTML = `<div style="grid-column:1/-1;color:var(--der);font-size:0.85rem;">Failed to load images. Check your Pixabay API key.</div>`;
+      _imgError(grid, 'Failed to load images. Check your Pixabay API key.');
       resolve();
     };
     document.head.appendChild(script);
   });
+}
+
+// Unsplash
+async function _unsplashSearch(word, k, grid, status, page, append) {
+  if (!k.unsplash) { toast('Add your Unsplash access key in ⚙ API Keys.', 'error'); return; }
+  const lang = document.getElementById('imageLang').value;
+  if (!append) _imgLoading(grid, 'Searching Unsplash…');
+  try {
+    const res = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(word)}&per_page=12&page=${page}&lang=${lang}&client_id=${k.unsplash}`);
+    if (!res.ok) { _imgError(grid, `Unsplash error: ${res.status}`); return; }
+    const data = await res.json();
+    if (!data.results?.length) {
+      if (!append) grid.innerHTML = `<div style="grid-column:1/-1;color:var(--muted);font-size:0.85rem;">No images found. Try a different word.</div>`;
+      _imgLoadMoreBtn(false);
+      return;
+    }
+    if (!append) grid.innerHTML = '';
+    data.results.forEach(photo => {
+      const div = document.createElement('div');
+      div.className = 'image-thumb';
+      div.innerHTML = `<img src="${photo.urls.thumb}" loading="lazy" alt="" /><div class="check">✓</div>`;
+      div.onclick = () => selectImage(div, photo.urls.regular, photo.urls.thumb);
+      grid.appendChild(div);
+    });
+    _imgLoadMoreBtn(data.results.length === 12);
+  } catch(e) { _imgError(grid, `Unsplash error: ${e.message}`); }
+}
+
+// Pexels
+async function _pexelsSearch(word, k, grid, status, page, append) {
+  if (!k.pexels) { toast('Add your Pexels API key in ⚙ API Keys.', 'error'); return; }
+  if (!append) _imgLoading(grid, 'Searching Pexels…');
+  try {
+    const res = await fetch(`https://api.pexels.com/v1/search?query=${encodeURIComponent(word)}&per_page=12&page=${page}`, {
+      headers: { 'Authorization': k.pexels },
+    });
+    if (!res.ok) { _imgError(grid, `Pexels error: ${res.status}`); return; }
+    const data = await res.json();
+    if (!data.photos?.length) {
+      if (!append) grid.innerHTML = `<div style="grid-column:1/-1;color:var(--muted);font-size:0.85rem;">No images found. Try a different word.</div>`;
+      _imgLoadMoreBtn(false);
+      return;
+    }
+    if (!append) grid.innerHTML = '';
+    data.photos.forEach(photo => {
+      const div = document.createElement('div');
+      div.className = 'image-thumb';
+      div.innerHTML = `<img src="${photo.src.medium}" loading="lazy" alt="" /><div class="check">✓</div>`;
+      div.onclick = () => selectImage(div, photo.src.large, photo.src.medium);
+      grid.appendChild(div);
+    });
+    _imgLoadMoreBtn(data.photos.length === 12);
+  } catch(e) { _imgError(grid, `Pexels error: ${e.message}`); }
+}
+
+// Replicate (flux-schnell)
+async function _replicateGenerate(prompt, k, grid, status) {
+  if (!k.replicate) { toast('Add your Replicate API token in ⚙ API Keys.', 'error'); return; }
+  _imgLoading(grid, 'Generating image (Replicate)…');
+  try {
+    const startRes = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${k.replicate}`, 'Content-Type': 'application/json', 'Prefer': 'wait' },
+      body: JSON.stringify({ input: { prompt, output_format: 'webp', num_outputs: 1 } }),
+    });
+    if (!startRes.ok) { _imgError(grid, `Replicate error: ${startRes.status}`); return; }
+    let pred = await startRes.json();
+
+    // Poll if not finished
+    while (pred.status !== 'succeeded' && pred.status !== 'failed') {
+      await new Promise(r => setTimeout(r, 1500));
+      const pollRes = await fetch(pred.urls.get, { headers: { 'Authorization': `Bearer ${k.replicate}` } });
+      pred = await pollRes.json();
+    }
+    if (pred.status === 'failed') { _imgError(grid, `Replicate generation failed: ${pred.error || ''}`); return; }
+    const url = Array.isArray(pred.output) ? pred.output[0] : pred.output;
+    _imgShowSingle(grid, status, url);
+  } catch(e) { _imgError(grid, `Replicate error: ${e.message}`); }
+}
+
+// OpenAI GPT Image 1
+async function _openaiGenerate(prompt, k, grid, status) {
+  if (!k.openai_image) { toast('Add your OpenAI API key in ⚙ API Keys.', 'error'); return; }
+  _imgLoading(grid, 'Generating image (GPT Image 1)…');
+  try {
+    const res = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${k.openai_image}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-image-1', prompt, n: 1, size: '1024x1024' }),
+    });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); _imgError(grid, `OpenAI error: ${res.status} ${err.error?.message || ''}`); return; }
+    const data = await res.json();
+    const b64 = data.data[0].b64_json;
+    _imgShowSingle(grid, status, `data:image/png;base64,${b64}`);
+  } catch(e) { _imgError(grid, `OpenAI error: ${e.message}`); }
+}
+
+// Gemini / Nano Banana (Imagen 3)
+async function _geminiGenerate(prompt, k, grid, status) {
+  if (!k.gemini) { toast('Add your Gemini API key in ⚙ API Keys.', 'error'); return; }
+  _imgLoading(grid, 'Generating image (Nano Banana)…');
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${k.gemini}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instances: [{ prompt }], parameters: { sampleCount: 1 } }),
+    });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); _imgError(grid, `Gemini error: ${res.status} ${err.error?.message || ''}`); return; }
+    const data = await res.json();
+    const pred = data.predictions?.[0];
+    if (!pred?.bytesBase64Encoded) { _imgError(grid, 'Gemini returned no image.'); return; }
+    _imgShowSingle(grid, status, `data:${pred.mimeType || 'image/jpeg'};base64,${pred.bytesBase64Encoded}`);
+  } catch(e) { _imgError(grid, `Gemini error: ${e.message}`); }
 }
 
 function selectImage(el, fullUrl, thumbUrl) {
@@ -1841,10 +2071,12 @@ checkUrlParams();
 loadDeck();
 renderDeck();
 updateApiStatus();
+updateImageSectionUI();
 updatePreview();
 
 const k = getKeys();
-if (!k.pixabay && !k.anthropic) setTimeout(openSettings, 400);
+const _imgKey = { pixabay: k.pixabay, replicate: k.replicate, openai: k.openai_image, gemini: k.gemini }[k.imageProvider];
+if (!_imgKey && !k.anthropic) setTimeout(openSettings, 400);
 </script>
 </body>
 </html>
