@@ -1072,7 +1072,7 @@ function checkUrlParams() {
 }
 
 function emptyDeck() {
-  if (!confirm('Remove all cards from the deck? API keys will be kept.')) return;
+  if (!confirm('Remove all cards from the deck?')) return;
   deck = [];
   saveDeck();
   renderDeck();
