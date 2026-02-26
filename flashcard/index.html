@@ -773,6 +773,11 @@
     }
   }
 
+  /* Prevent iOS auto-zoom on input focus (triggered when font-size < 16px) */
+  @media (hover: none) and (pointer: coarse) {
+    input, select, textarea { font-size: 16px !important; }
+  }
+
   @media (max-width: 600px) {
     header {
       flex-direction: column;
@@ -816,8 +821,7 @@
   <h1>Wortschatz <span>German Flashcard Studio</span></h1>
   <div class="header-right">
     <span id="api-status"></span>
-    <button class="btn btn-sm" onclick="clearStorage()">✕ Clear Storage</button>
-    <button class="btn btn-sm" onclick="openSettings()">⚙ API Keys</button>
+    <button class="btn" onclick="openSettings()" style="font-size:1.1rem;padding:5px 10px;line-height:1;">⚙</button>
   </div>
 </header>
 
@@ -837,7 +841,7 @@
     </div>
 
     <div class="action-bar">
-      <button class="btn btn-primary" onclick="searchAll()" id="searchBtn">Search All</button>
+      <button class="btn btn-primary" onclick="searchAll()" id="searchBtn">Go</button>
       <button class="btn" onclick="clearCard()">Clear</button>
     </div>
 
@@ -860,7 +864,7 @@
         <span>Images</span>
         <span id="img-status" style="color:var(--muted);font-size:0.75rem;"></span>
       </div>
-      <div style="display:flex;gap:6px;margin-bottom:8px;">
+      <div style="display:flex;gap:6px;margin-bottom:6px;">
         <select class="small-input" id="imageProvider" style="flex:0 0 auto; width:auto;"
           onchange="localStorage.setItem('wk_image_provider', this.value); updateImageSectionUI();">
           <option value="pixabay">Pixabay</option>
@@ -871,16 +875,21 @@
           <option value="de" selected>DE</option>
           <option value="en">EN</option>
         </select>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
         <input class="small-input" id="imageQuery" placeholder="image search query…"
           onkeydown="if(event.key==='Enter') searchImages(document.getElementById('imageQuery').value.trim())" />
         <button class="btn btn-sm" id="imageSearchBtn" onclick="searchImages(document.getElementById('imageQuery').value.trim())">Search</button>
       </div>
       <div class="image-grid" id="imageGrid">
-        <div style="grid-column:1/-1;color:var(--muted);font-size:0.85rem;padding:10px 0;">
-          Enter a word and click Search All.
-        </div>
       </div>
       <button class="btn btn-sm" id="imgLoadMoreBtn" onclick="loadMoreImages()" style="display:none;width:100%;margin-top:6px;">Load more</button>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <input class="small-input" id="imageUrlInput" placeholder="or paste image URL…"
+          onkeydown="if(event.key==='Enter') useImageUrl()" />
+        <button class="btn btn-sm" onclick="useImageUrl()">Use</button>
+        <button class="btn btn-sm" id="imgClearBtn" onclick="clearImage()" style="display:none;color:var(--muted);">✕</button>
+      </div>
     </div>
 
     <hr class="divider" />
@@ -988,6 +997,7 @@
         <h3>Current Deck</h3>
         <div style="display:flex;gap:8px;align-items:center;">
           <span class="deck-count" id="deckCount">0 cards</span>
+          <button class="btn btn-sm" onclick="emptyDeck()" style="color:var(--muted);">✕ Empty</button>
           <button class="btn btn-sm" onclick="exportApkg()">↓ .apkg</button>
         </div>
       </div>
@@ -1002,7 +1012,7 @@
 <!-- ── Settings Modal ── -->
 <div class="modal-backdrop" id="settingsModal">
   <div class="modal">
-    <h2>API Keys</h2>
+    <h2>Settings</h2>
     <p>Your keys are stored only in your browser's localStorage and never sent anywhere except the respective APIs.</p>
 
     <label>Pixabay API Key <a href="https://pixabay.com/api/docs" target="_blank">Get Key ↗</a></label>
@@ -1026,9 +1036,12 @@
     <label>Anthropic API Key <a href="https://console.anthropic.com/settings/keys" target="_blank">Get Key ↗</a></label>
     <input id="keyAnthropic" type="text" placeholder="sk-ant-…" />
 
-    <div class="modal-footer">
-      <button class="btn" onclick="closeSettings()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveSettings()">Save Keys</button>
+    <div class="modal-footer" style="justify-content:space-between;">
+      <button class="btn" style="color:var(--der);border-color:var(--der);opacity:0.7;" onclick="clearStorage()">Clear all data</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn" onclick="closeSettings()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1055,6 +1068,14 @@ function checkUrlParams() {
     window.history.replaceState({path: cleanUrl}, '', cleanUrl);
     toast('API keys imported from URL', 'success');
   }
+}
+
+function emptyDeck() {
+  if (!confirm('Remove all cards from the deck? API keys will be kept.')) return;
+  deck = [];
+  saveDeck();
+  renderDeck();
+  toast('Deck cleared.', '');
 }
 
 function clearStorage() {
@@ -1594,6 +1615,24 @@ function selectImage(el, fullUrl, thumbUrl) {
   document.querySelectorAll('.image-thumb').forEach(t => t.classList.remove('selected'));
   el.classList.add('selected');
   selectedImage = { url: fullUrl, thumb: thumbUrl };
+  document.getElementById('imgClearBtn').style.display = '';
+  updatePreview();
+}
+
+function useImageUrl() {
+  const url = document.getElementById('imageUrlInput').value.trim();
+  if (!url) return;
+  selectedImage = { url };
+  document.getElementById('imgClearBtn').style.display = '';
+  document.querySelectorAll('.image-thumb').forEach(t => t.classList.remove('selected'));
+  updatePreview();
+}
+
+function clearImage() {
+  selectedImage = null;
+  document.getElementById('imgClearBtn').style.display = 'none';
+  document.getElementById('imageUrlInput').value = '';
+  document.querySelectorAll('.image-thumb').forEach(t => t.classList.remove('selected'));
   updatePreview();
 }
 
@@ -1882,6 +1921,7 @@ function editCard(id) {
   document.getElementById('definitionInput').value = card.definition || '';
   document.getElementById('definitionDEInput').value = card.definitionDE || '';
   selectedImage = card.imageUrl ? { url: card.imageUrl } : null;
+  document.getElementById('imgClearBtn').style.display = selectedImage ? '' : 'none';
   selectedAudio = card.hasAudio ? { url: card.audioUrl, filename: card.audioFile, hasAudio: true } : null;
   document.querySelectorAll('.add-to-deck-btn').forEach(el => el.textContent = '✓ Replace Card');
   document.querySelectorAll('.cancel-edit-btn').forEach(el => el.style.display = '');
@@ -2063,7 +2103,10 @@ function clearCard() {
   document.getElementById('sentEN').value = '';
   document.getElementById('definitionInput').value = '';
   document.getElementById('definitionDEInput').value = '';
+  document.getElementById('imageLang').value = 'de';
   document.getElementById('imageGrid').innerHTML = '';
+  document.getElementById('imageUrlInput').value = '';
+  document.getElementById('imgClearBtn').style.display = 'none';
   document.getElementById('audioList').innerHTML = '';
   selectedImage = null;
   selectedAudio = null;
