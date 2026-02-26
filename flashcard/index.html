@@ -861,6 +861,12 @@
         <span id="img-status" style="color:var(--muted);font-size:0.75rem;"></span>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <select class="small-input" id="imageProvider" style="flex:0 0 auto; width:auto;"
+          onchange="localStorage.setItem('wk_image_provider', this.value); updateImageSectionUI();">
+          <option value="pixabay">Pixabay</option>
+          <option value="unsplash">Unsplash</option>
+          <option value="pexels">Pexels</option>
+        </select>
         <select class="small-input" id="imageLang" style="flex:0 0 auto; width:auto;">
           <option value="de" selected>DE</option>
           <option value="en">EN</option>
@@ -999,16 +1005,6 @@
     <h2>API Keys</h2>
     <p>Your keys are stored only in your browser's localStorage and never sent anywhere except the respective APIs.</p>
 
-    <label>Image Source</label>
-    <select id="imageProvider" class="small-input" style="width:100%;margin-bottom:12px;">
-      <option value="pixabay">Pixabay – photo search</option>
-      <option value="unsplash">Unsplash – photo search</option>
-      <option value="pexels">Pexels – photo search</option>
-      <option value="replicate" disabled>Replicate – AI (flux-schnell)</option>
-      <option value="openai" disabled>GPT Image 1 – AI (OpenAI)</option>
-      <option value="gemini" disabled>Nano Banana – AI (Gemini Flash)</option>
-    </select>
-
     <label>Pixabay API Key <a href="https://pixabay.com/api/docs" target="_blank">Get Key ↗</a></label>
     <input id="keyPixabay" type="text" placeholder="Enter Pixabay key..." />
 
@@ -1109,11 +1105,10 @@ function getKeys() {
     imageProvider: localStorage.getItem('wk_image_provider') || 'pixabay',
   };
 }
-function getImageProvider() { return localStorage.getItem('wk_image_provider') || 'pixabay'; }
+function getImageProvider() { const el = document.getElementById('imageProvider'); return el ? el.value : (localStorage.getItem('wk_image_provider') || 'pixabay'); }
 
 function openSettings() {
   const k = getKeys();
-  document.getElementById('imageProvider').value = k.imageProvider;
   document.getElementById('keyPixabay').value = k.pixabay;
   document.getElementById('keyUnsplash').value = k.unsplash;
   document.getElementById('keyPexels').value = k.pexels;
@@ -1127,7 +1122,6 @@ function closeSettings() {
   document.getElementById('settingsModal').classList.remove('open');
 }
 function saveSettings() {
-  localStorage.setItem('wk_image_provider', document.getElementById('imageProvider').value);
   localStorage.setItem('wk_pixabay', document.getElementById('keyPixabay').value.trim());
   localStorage.setItem('wk_unsplash', document.getElementById('keyUnsplash').value.trim());
   localStorage.setItem('wk_pexels', document.getElementById('keyPexels').value.trim());
@@ -1355,11 +1349,28 @@ async function generateDefinitions(pArg) {
 
 // ── Image search / generation ──
 function updateImageSectionUI() {
-  const provider = getImageProvider();
-  const isAI = !['pixabay', 'unsplash', 'pexels'].includes(provider);
-  document.getElementById('imageLang').style.display = isAI ? 'none' : '';
-  document.getElementById('imageSearchBtn').textContent = isAI ? 'Generate' : 'Search';
-  document.getElementById('imageQuery').placeholder = isAI ? 'image prompt…' : 'image search query…';
+  const k = getKeys();
+  const keyFor = { pixabay: k.pixabay, unsplash: k.unsplash, pexels: k.pexels };
+  const sel = document.getElementById('imageProvider');
+
+  // Gray out options with no key
+  Array.from(sel.options).forEach(opt => {
+    const hasKey = !!keyFor[opt.value];
+    opt.disabled = !hasKey;
+    opt.style.color = hasKey ? '' : 'var(--muted)';
+  });
+
+  // If current selection has no key, switch to first available
+  const saved = localStorage.getItem('wk_image_provider') || '';
+  const firstValid = Object.keys(keyFor).find(p => keyFor[p]);
+  if (saved && keyFor[saved]) {
+    sel.value = saved;
+  } else if (firstValid) {
+    sel.value = firstValid;
+    localStorage.setItem('wk_image_provider', firstValid);
+  } else {
+    sel.value = 'pixabay'; // fallback — no keys configured
+  }
 }
 
 function searchImages(word) {
