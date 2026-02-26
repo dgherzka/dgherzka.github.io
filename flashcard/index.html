@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Flashcard Studio</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/flashcard/manifest.json">
+<link rel="apple-touch-icon" href="/favicon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Wortschatz">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
 <style>
@@ -813,9 +818,50 @@
       flex-direction: column;
     }
   }
+
+  /* ── Pull-to-refresh ── */
+  #ptr {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 64px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    transform: translateY(-64px);
+    z-index: 9999;
+    pointer-events: none;
+  }
+  #ptr-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  }
+  #ptr-icon svg {
+    width: 16px;
+    height: 16px;
+    stroke: var(--muted);
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform 0.25s ease, stroke 0.15s ease;
+  }
+  #ptr.ptr-ready #ptr-icon svg,
+  #ptr.ptr-refreshing #ptr-icon svg { stroke: var(--text); }
+  #ptr.ptr-ready #ptr-icon svg { transform: rotate(180deg); }
+  #ptr.ptr-refreshing #ptr-icon svg { animation: ptr-spin 0.7s linear infinite; }
+  @keyframes ptr-spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
+<div id="ptr"><div id="ptr-icon"><svg viewBox="0 0 24 24"><path d="M12 4v16M6 14l6 6 6-6"/></svg></div></div>
 
 <!-- Header -->
 <header>
@@ -2257,6 +2303,45 @@ updatePreview();
 const k = getKeys();
 const _imgKey = { pixabay: k.pixabay, replicate: k.replicate, openai: k.openai_image, gemini: k.gemini }[k.imageProvider];
 if (!_imgKey && !k.anthropic) setTimeout(openSettings, 400);
+
+// ── Pull-to-refresh (standalone/PWA only) ──
+(function() {
+  const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+  if (!standalone) return;
+  const PTR = document.getElementById('ptr');
+  const H = 64, THRESHOLD = 72;
+  let startY = 0, pulling = false, state = '';
+  function applyTransform(px, animate) {
+    PTR.style.transition = animate ? 'transform 0.25s ease' : 'none';
+    PTR.style.transform = `translateY(${px - H}px)`;
+  }
+  function setState(s) { state = s; PTR.className = s ? 'ptr-' + s : ''; }
+  document.addEventListener('touchstart', e => {
+    if (state === 'refreshing') return;
+    if (window.scrollY === 0) { startY = e.touches[0].clientY; pulling = true; }
+  }, { passive: true });
+  document.addEventListener('touchmove', e => {
+    if (!pulling || state === 'refreshing') return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy <= 0) { pulling = false; return; }
+    e.preventDefault();
+    const pull = Math.min(H + 16, dy * 0.4);
+    applyTransform(pull, false);
+    setState(pull >= THRESHOLD * 0.55 ? (pull >= THRESHOLD * 0.8 ? 'ready' : 'pulling') : '');
+  }, { passive: false });
+  document.addEventListener('touchend', () => {
+    if (!pulling) return;
+    pulling = false;
+    if (state === 'ready') {
+      setState('refreshing');
+      applyTransform(H * 0.6, true);
+      setTimeout(() => location.reload(), 350);
+    } else {
+      setState('');
+      applyTransform(0, true);
+    }
+  }, { passive: true });
+})();
 </script>
 </body>
 </html>
