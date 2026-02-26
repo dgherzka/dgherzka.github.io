@@ -161,6 +161,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 4px 9px;
+    flex-shrink: 0;
   }
   .parsed-chip label {
     font-family: var(--font-mono);
@@ -177,8 +178,7 @@
     color: var(--accent);
     font-family: var(--font-mono);
     font-size: 0.82rem;
-    min-width: 30px;
-    width: auto;
+    flex-shrink: 0;
     padding: 0;
   }
   .parsed-chip input:focus { outline: none; }
@@ -297,7 +297,7 @@
     width: 100%;
     background: transparent;
     border: none;
-    color: var(--muted);
+    color: var(--text);
     font-family: var(--font-serif);
     font-size: 0.9rem;
     line-height: 1.6;
@@ -914,6 +914,7 @@
         <span>Example Sentence</span>
         <div style="display:flex;gap:6px;">
           <button class="btn btn-sm" onclick="checkSentence()" id="checkBtn">Check</button>
+          <button class="btn btn-sm" onclick="translateSentence()" id="translateBtn">EN→DE</button>
           <button class="btn btn-sm" onclick="generateSentence()" id="sentBtn">Generate</button>
         </div>
       </div>
@@ -1082,6 +1083,7 @@ function emptyDeck() {
 function clearStorage() {
   if (!confirm('This will delete your saved deck and API keys. Are you sure?')) return;
   localStorage.removeItem('wk_deck');
+  localStorage.removeItem('wk_editor');
   localStorage.removeItem('wk_image_provider');
   localStorage.removeItem('wk_pixabay');
   localStorage.removeItem('wk_unsplash');
@@ -1177,7 +1179,8 @@ function getParsed() {
     word:   chipVal('chip-word')   || parsedWord.word   || '',
     gender: chipVal('chip-gender') || parsedWord.gender || '',
     plural: chipVal('chip-plural') || parsedWord.plural || '',
-    pos:    parsedWord.pos || '',
+    pos:        parsedWord.pos || '',
+    commonness: chipVal('chip-commonness') || parsedWord.commonness || '',
     forms:  {
       past:        chipVal('chip-past')        || (parsedWord.forms?.past        || ''),
       participle:  chipVal('chip-participle')  || (parsedWord.forms?.participle  || ''),
@@ -1193,26 +1196,28 @@ function renderChips(p) {
   const pos = p.pos || '';
   const container = document.getElementById('parsedTags');
 
-  const chip = (id, label, val, width) =>
-    `<div class="parsed-chip"><label>${label}</label><input id="${id}" value="${(val||'').replace(/"/g,'&quot;')}" style="width:${width}px" oninput="updatePreview()"></div>`;
+  const chipW = val => Math.max(24, (String(val||'').length) * 8 + 6);
+  const chip = (id, label, val) =>
+    `<div class="parsed-chip"><label>${label}</label><input id="${id}" value="${String(val??'').replace(/"/g,'&quot;')}" style="width:${chipW(val)}px" oninput="this.style.width=Math.max(24,this.value.length*8+6)+'px';updatePreview()"></div>`;
 
   let html = `<span class="pos-badge">${pos || '?'}</span>`;
-  html += chip('chip-word', 'word', p.word, 90);
+  html += chip('chip-word', 'word', p.word);
 
   if (pos === 'noun') {
     const gClass = ['der','die','das'].includes(p.gender) ? p.gender : '';
-    html += `<div class="parsed-chip"><label>article</label><input id="chip-gender" class="gender-inp ${gClass}" value="${p.gender||''}" style="width:34px" oninput="updateGenderChip(this)"></div>`;
-    html += chip('chip-plural', 'plural', p.plural, 70);
+    html += `<div class="parsed-chip"><label>article</label><input id="chip-gender" class="gender-inp ${gClass}" value="${p.gender||''}" style="width:${chipW(p.gender||'der')}px" oninput="updateGenderChip(this)"></div>`;
+    html += chip('chip-plural', 'plural', p.plural);
   }
   if (pos === 'verb') {
-    html += chip('chip-past',       'simple past',  p.forms?.past,       80);
-    html += chip('chip-participle', 'participle',   p.forms?.participle, 90);
-    if (p.forms?.auxiliary) html += chip('chip-aux', 'aux', p.forms.auxiliary, 34);
+    html += chip('chip-past',       'simple past',  p.forms?.past);
+    html += chip('chip-participle', 'participle',   p.forms?.participle);
+    if (p.forms?.auxiliary) html += chip('chip-aux', 'aux', p.forms.auxiliary);
   }
   if (pos === 'adjective') {
-    html += chip('chip-comp',   'comp.',   p.forms?.comparative, 80);
-    html += chip('chip-superl', 'superl.', p.forms?.superlative, 90);
+    html += chip('chip-comp',   'comp.',   p.forms?.comparative);
+    html += chip('chip-superl', 'superl.', p.forms?.superlative);
   }
+  if (p.commonness) html += chip('chip-commonness', 'commonness', p.commonness);
 
   container.innerHTML = html;
   container.classList.add('visible');
@@ -1228,12 +1233,14 @@ function updateGenderChip(inp) {
 // ── AI entry parser ──
 async function parseEntry(raw) {
   const k = getKeys();
+  const query = raw.trim();
+
   if (!k.anthropic) {
-    const parts = raw.trim().split(/\s+/);
+    const parts = query.split(/\s+/);
     const maybeArticle = ['der','die','das'].includes(parts[0]?.toLowerCase()) ? parts[0].toLowerCase() : '';
-    const word = maybeArticle ? parts.slice(1).join(' ') : raw.trim();
-    renderChips({ word, gender: maybeArticle, plural: '', pos: 'noun', forms: {} });
-    return word || raw;
+    const word = maybeArticle ? parts.slice(1).join(' ') : query;
+    renderChips({ word, gender: maybeArticle, plural: '', pos: 'noun', forms: {}, commonness: '' });
+    return word || query;
   }
 
   try {
@@ -1247,24 +1254,29 @@ async function parseEntry(raw) {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 250,
+        max_tokens: 300,
         messages: [{ role: 'user', content:
-`Parse this vocabulary query and return ONLY a JSON object, no markdown. This is a description of a vocabulary item. It may be a German word or a query to find an unknown word. Look up the most common German translation of the English word if the input is in English.
+`You are helping build a German flashcard. Interpret the user's query and identify the intended German vocabulary item. The query could be:
+- A German word, optionally with its article (e.g. "der Hund", "laufen", "schön")
+- An English word or phrase to translate into German — marked with hints like "(en)", "(English)", "English word for...", etc. When translating from English, treat the input as English and find the German equivalent. Do NOT map it to a visually similar German word (e.g. "wand" in English means a magic stick → "der Stab", not the German word "Wand").
+- A description or clue (e.g. "the most common word for a seat on a bus", "an archaic word for dinner", "the German word for meeting that starts with T")
 
-The query is:
-"${raw}"
+Return ONLY a JSON object (no markdown). The "word" field must be the bare lemma WITHOUT any article prefix.
+
+"${query}"
 
 {
-  "word": "<canonical German lemma>",
+  "word": "<bare German lemma, NO article — e.g. 'Hund' not 'der Hund'>",
   "pos": "<noun|verb|adjective|adverb|preposition|conjunction|other>",
-  "gender": "<der|die|das|> (nouns only, else empty)",
-  "plural": "<plural form> (nouns only, else empty)",
+  "gender": "<der|die|das> (nouns only, else empty string)",
+  "plural": "<plural form, nouns only, else empty string>",
+  "commonness": <integer 1–10, where 1 is extremely rare and 10 is extremely common in everyday German>,
   "forms": {
-    "past": "<Präteritum 1st person singular, verbs only>",
-    "participle": "<Partizip II, verbs only>",
-    "auxiliary": "<hat|ist, verbs only>",
-    "comparative": "<comparative form, adjectives only>",
-    "superlative": "<superlative form without 'am', adjectives only>"
+    "past": "<Präteritum 1st person singular, verbs only, else empty string>",
+    "participle": "<Partizip II, verbs only, else empty string>",
+    "auxiliary": "<hat|ist, verbs only, else empty string>",
+    "comparative": "<comparative form, adjectives only, else empty string>",
+    "superlative": "<superlative without 'am', adjectives only, else empty string>"
   }
 }`
         }]
@@ -1273,12 +1285,21 @@ The query is:
     const data = await res.json();
     const text = data.content?.[0]?.text?.trim() || '';
     const p = JSON.parse(text.replace(/^```json\s*|^```\s*|```\s*$/gm,'').trim());
-    renderChips({ word: p.word||raw, gender: p.gender||'', plural: p.plural||'', pos: p.pos||'noun', forms: p.forms||{} });
-    return p.word || raw;
+    // Strip article from word if LLM included it despite instructions
+    let word = (p.word || query).trim();
+    for (const art of ['der ', 'die ', 'das ']) {
+      if (word.toLowerCase().startsWith(art)) {
+        if (!p.gender) p.gender = art.trim();
+        word = word.slice(art.length);
+        break;
+      }
+    }
+    renderChips({ word, gender: p.gender||'', plural: p.plural||'', pos: p.pos||'noun', forms: p.forms||{}, commonness: p.commonness||'' });
+    return word;
   } catch(e) {
     console.warn('parseEntry failed', e);
-    renderChips({ word: raw, gender: '', plural: '', pos: 'noun', forms: {} });
-    return raw;
+    renderChips({ word: query, gender: '', plural: '', pos: 'noun', forms: {}, commonness: '' });
+    return query;
   }
 }
 
@@ -1732,6 +1753,18 @@ function playSelectedAudio() {
 }
 
 // ── AI Generation ──
+function _randomSentenceHint() {
+  const registers = ['informal/colloquial', 'formal', 'neutral/everyday'];
+  const tenses    = ['present tense', 'simple past', 'perfect tense', 'future tense'];
+  const contexts  = ['at home', 'at work', 'while travelling', 'in a restaurant or shop',
+                     'in nature', 'with friends', 'in a news or media context',
+                     'in a school or academic setting', 'in a medical or health context',
+                     'in a historical or literary context'];
+  const types     = ['a statement', 'a question', 'an exclamation'];
+  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  return `Make it ${pick(types)} using ${pick(tenses)}, ${pick(registers)} register, set ${pick(contexts)}.`;
+}
+
 async function generateSentence(pArg) {
   const k = getKeys();
   if (!k.anthropic) { toast('Add your Anthropic key in ⚙ API Keys.', 'error'); return; }
@@ -1755,9 +1788,10 @@ async function generateSentence(pArg) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 200,
+        temperature: 1.0,
         messages: [{
           role: 'user',
-          content: `Create ONE short, natural German example sentence using the word "${p.gender ? p.gender + ' ' : ''}${word}". Reply in exactly this format:
+          content: `Create ONE short, natural German example sentence using the word "${p.gender ? p.gender + ' ' : ''}${word}". ${_randomSentenceHint()} Reply in exactly this format:
 DE: <German sentence>
 EN: <English translation>`
         }]
@@ -1772,6 +1806,61 @@ EN: <English translation>`
     updatePreview();
   } catch(e) { toast('Sentence generation failed.', 'error'); }
   btn.innerHTML = 'Generate';
+  btn.disabled = false;
+}
+
+async function translateSentence() {
+  const k = getKeys();
+  if (!k.anthropic) { toast('Add your Anthropic key in ⚙ API Keys.', 'error'); return; }
+  const en = document.getElementById('sentEN').value.trim();
+  if (!en) { toast('Enter an English sentence first.', 'error'); return; }
+  const p = getParsed();
+  const word = p.word || '';
+  if (!word) { toast('Enter a word first.', 'error'); return; }
+
+  const btn = document.getElementById('translateBtn');
+  btn.innerHTML = '<span class="spinner"></span>';
+  btn.disabled = true;
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': k.anthropic,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 200,
+        messages: [{
+          role: 'user',
+          content: `Translate this English sentence into natural German, and the translation must use the word "${p.gender ? p.gender + ' ' : ''}${word}" (or an inflected form of it).
+
+English: "${en}"
+
+If the sentence can be naturally translated using that word, reply with exactly:
+DE: <German translation>
+
+If it cannot be naturally translated using "${word}", reply with exactly:
+ERROR: <brief reason>`
+        }]
+      })
+    });
+    const data = await res.json();
+    const text = data.content?.[0]?.text?.trim() || '';
+    const deMatch = text.match(/^DE:\s*(.+)/m);
+    const errMatch = text.match(/^ERROR:\s*(.+)/m);
+    if (deMatch) {
+      document.getElementById('sentDE').value = deMatch[1].trim();
+      updatePreview();
+    } else if (errMatch) {
+      toast(`Can't translate: ${errMatch[1].trim()}`, 'error');
+    } else {
+      toast('Translation failed.', 'error');
+    }
+  } catch(e) { toast('Translation failed.', 'error'); }
+  btn.innerHTML = 'EN→DE';
   btn.disabled = false;
 }
 
@@ -1821,12 +1910,46 @@ function applyCorrected(text) {
 }
 
 // ── Preview update ──
+function saveEditorState() {
+  try {
+    localStorage.setItem('wk_editor', JSON.stringify({
+      entry:    document.getElementById('entryInput').value,
+      parsed:   parsedWord,
+      sentDE:   document.getElementById('sentDE').value,
+      sentEN:   document.getElementById('sentEN').value,
+      defEN:    document.getElementById('definitionInput').value,
+      defDE:    document.getElementById('definitionDEInput').value,
+      imgQuery: document.getElementById('imageQuery').value,
+      image:    selectedImage,
+      audio:    selectedAudio,
+    }));
+  } catch(e) {}
+}
+
+function loadEditorState() {
+  try {
+    const raw = localStorage.getItem('wk_editor');
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    if (s.entry) document.getElementById('entryInput').value = s.entry;
+    if (s.parsed?.word) { parsedWord = s.parsed; renderChips(s.parsed); }
+    if (s.sentDE)   document.getElementById('sentDE').value = s.sentDE;
+    if (s.sentEN)   document.getElementById('sentEN').value = s.sentEN;
+    if (s.defEN)    document.getElementById('definitionInput').value = s.defEN;
+    if (s.defDE)    document.getElementById('definitionDEInput').value = s.defDE;
+    if (s.imgQuery) document.getElementById('imageQuery').value = s.imgQuery;
+    if (s.image)  { selectedImage = s.image; document.getElementById('imgClearBtn').style.display = ''; }
+    if (s.audio)    selectedAudio = s.audio;
+  } catch(e) {}
+}
+
 function updatePreview() {
   const p      = getParsed();
   const defEN  = document.getElementById('definitionInput').value.trim();
   const defDE  = document.getElementById('definitionDEInput').value.trim();
   const sentDE = document.getElementById('sentDE').value.trim();
   const sentEN = document.getElementById('sentEN').value.trim();
+  saveEditorState();
 
   const hasWord = !!p.word;
 
@@ -1893,6 +2016,7 @@ function addToDeck() {
     sentEN:       document.getElementById('sentEN').value.trim(),
     definition:   document.getElementById('definitionInput').value.trim(),
     definitionDE: document.getElementById('definitionDEInput').value.trim(),
+    commonness:   p.commonness || '',
     imageUrl:     selectedImage?.url || '',
     audioUrl:     selectedAudio?.url || '',
     audioFile:    selectedAudio?.filename || '',
@@ -1916,7 +2040,7 @@ function editCard(id) {
   if (!card) return;
   editingId = id;
   document.getElementById('entryInput').value = card.word;
-  renderChips({ word: card.word, gender: card.gender||'', plural: card.plural||'', pos: card.pos||'noun', forms: card.forms||{} });
+  renderChips({ word: card.word, gender: card.gender||'', plural: card.plural||'', pos: card.pos||'noun', forms: card.forms||{}, commonness: card.commonness||'' });
   document.getElementById('sentDE').value = card.sentDE || '';
   document.getElementById('sentEN').value = card.sentEN || '';
   document.getElementById('definitionInput').value = card.definition || '';
@@ -2039,7 +2163,7 @@ async function exportApkg() {
           </div>
         </div>`
       }],
-      flds: ['Image','Article','Word','Part_of_Speech','Forms','Audio','Sentence_DE','Sentence_EN','Definition_EN','Definition_DE'].map((n,i)=>({name:n, ord:i, sticky:false, rtl:false, font:'Arial', size:20, media:[]})),
+      flds: ['Image','Article','Word','Part_of_Speech','Forms','Audio','Sentence_DE','Sentence_EN','Definition_EN','Definition_DE','Commonness'].map((n,i)=>({name:n, ord:i, sticky:false, rtl:false, font:'Arial', size:20, media:[]})),
       css: `
         .card{font-family:Helvetica;text-align:center;background:#1a1a1a;color:#f0e8d8}
         .back{padding:16px;display:flex;flex-direction:column;min-height:200px}
@@ -2073,7 +2197,7 @@ async function exportApkg() {
     for (let i=0; i<deck.length; i++) {
       const c = deck[i];
       const sep = '\x1f';
-      const flds = [imageField[c.id]||'', c.gender||'', c.word||'', c.pos||'', c.formsStr||'', audioField[c.id]||'', c.sentDE||'', c.sentEN||'', c.definition||'', c.definitionDE||''].join(sep);
+      const flds = [imageField[c.id]||'', c.gender||'', c.word||'', c.pos||'', c.formsStr||'', audioField[c.id]||'', c.sentDE||'', c.sentEN||'', c.definition||'', c.definitionDE||'', String(c.commonness||'')].join(sep);
       const tags = c.gender ? ` ${c.gender} ` : ' ';
       db.run(`INSERT INTO notes VALUES (?,?,?,?,?,?,?,?,?,?,?)`, [c.id, c.id.toString(36), modelId, now, -1, tags, flds, c.word, strHash(c.word||''), 0, '']);
       db.run(`INSERT INTO cards VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [c.id + 1, c.id, deckId, 0, now, -1, 0, 0, i+1, 0, 0, 0, 0, 0, 0, 0, 0, '']);
@@ -2127,6 +2251,7 @@ loadDeck();
 renderDeck();
 updateApiStatus();
 updateImageSectionUI();
+loadEditorState();
 updatePreview();
 
 const k = getKeys();
