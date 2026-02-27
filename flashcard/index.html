@@ -915,6 +915,7 @@
         <select class="small-input" id="imageProvider" style="flex:0 0 auto; width:auto;"
           onchange="localStorage.setItem('wk_image_provider', this.value); updateImageSectionUI();">
           <option value="pixabay">Pixabay</option>
+          <option value="flickr">Flickr</option>
           <option value="unsplash">Unsplash</option>
           <option value="pexels">Pexels</option>
         </select>
@@ -1069,6 +1070,9 @@
     <label>Unsplash Access Key <a href="https://unsplash.com/developers" target="_blank">Get Key ↗</a></label>
     <input id="keyUnsplash" type="text" placeholder="Enter Unsplash access key..." />
 
+    <label>Flickr API Key <a href="https://www.flickr.com/services/apps/create/" target="_blank">Get Key ↗</a></label>
+    <input id="keyFlickr" type="text" placeholder="Enter Flickr key..." />
+
     <label>Pexels API Key <a href="https://www.pexels.com/api/" target="_blank">Get Key ↗</a></label>
     <input id="keyPexels" type="text" placeholder="Enter Pexels key..." />
 
@@ -1132,6 +1136,7 @@ function clearStorage() {
   localStorage.removeItem('wk_editor');
   localStorage.removeItem('wk_image_provider');
   localStorage.removeItem('wk_pixabay');
+  localStorage.removeItem('wk_flickr');
   localStorage.removeItem('wk_unsplash');
   localStorage.removeItem('wk_pexels');
   localStorage.removeItem('wk_replicate');
@@ -1166,6 +1171,7 @@ function handleRevealEnd(el) {
 function getKeys() {
   return {
     pixabay:      localStorage.getItem('wk_pixabay') || '',
+    flickr:       localStorage.getItem('wk_flickr') || '',
     unsplash:     localStorage.getItem('wk_unsplash') || '',
     pexels:       localStorage.getItem('wk_pexels') || '',
     replicate:    localStorage.getItem('wk_replicate') || '',
@@ -1180,6 +1186,7 @@ function getImageProvider() { const el = document.getElementById('imageProvider'
 function openSettings() {
   const k = getKeys();
   document.getElementById('keyPixabay').value = k.pixabay;
+  document.getElementById('keyFlickr').value = k.flickr;
   document.getElementById('keyUnsplash').value = k.unsplash;
   document.getElementById('keyPexels').value = k.pexels;
   document.getElementById('keyReplicate').value = k.replicate;
@@ -1193,6 +1200,7 @@ function closeSettings() {
 }
 function saveSettings() {
   localStorage.setItem('wk_pixabay', document.getElementById('keyPixabay').value.trim());
+  localStorage.setItem('wk_flickr', document.getElementById('keyFlickr').value.trim());
   localStorage.setItem('wk_unsplash', document.getElementById('keyUnsplash').value.trim());
   localStorage.setItem('wk_pexels', document.getElementById('keyPexels').value.trim());
   localStorage.setItem('wk_replicate', document.getElementById('keyReplicate').value.trim());
@@ -1207,7 +1215,7 @@ function saveSettings() {
 
 function updateApiStatus() {
   const k = getKeys();
-  const imgKey = { pixabay: k.pixabay, unsplash: k.unsplash, pexels: k.pexels, replicate: k.replicate, openai: k.openai_image, gemini: k.gemini }[k.imageProvider];
+  const imgKey = { pixabay: k.pixabay, flickr: k.flickr, unsplash: k.unsplash, pexels: k.pexels, replicate: k.replicate, openai: k.openai_image, gemini: k.gemini }[k.imageProvider];
   const el = document.getElementById('api-status');
   el.innerHTML = [
     `<span class="status-dot ${imgKey ? 'ok' : 'missing'}"></span><span style="font-size:0.75rem;color:var(--muted);margin-right:8px;font-family:var(--font-mono);">Images</span>`,
@@ -1439,7 +1447,7 @@ async function generateDefinitions(pArg) {
 // ── Image search / generation ──
 function updateImageSectionUI() {
   const k = getKeys();
-  const keyFor = { pixabay: k.pixabay, unsplash: k.unsplash, pexels: k.pexels };
+  const keyFor = { pixabay: k.pixabay, flickr: k.flickr, unsplash: k.unsplash, pexels: k.pexels };
   const sel = document.getElementById('imageProvider');
 
   // Gray out options with no key
@@ -1475,6 +1483,7 @@ function searchImages(word) {
   status.textContent = '';
 
   if (provider === 'pixabay') return _pixabaySearch(word, k, grid, status, 1, false);
+  if (provider === 'flickr') return _flickrSearch(word, k, grid, status, 1, false);
   if (provider === 'unsplash') return _unsplashSearch(word, k, grid, status, 1, false);
   if (provider === 'pexels') return _pexelsSearch(word, k, grid, status, 1, false);
   if (provider === 'replicate') return _replicateGenerate(word, k, grid, status);
@@ -1491,13 +1500,14 @@ function loadMoreImages() {
   const grid = document.getElementById('imageGrid');
   const status = document.getElementById('img-status');
   if (provider === 'pixabay') return _pixabaySearch(_imgLastQuery, k, grid, status, _imgPage, true);
+  if (provider === 'flickr') return _flickrSearch(_imgLastQuery, k, grid, status, _imgPage, true);
   if (provider === 'unsplash') return _unsplashSearch(_imgLastQuery, k, grid, status, _imgPage, true);
   if (provider === 'pexels') return _pexelsSearch(_imgLastQuery, k, grid, status, _imgPage, true);
 }
 
 function _imgLoadMoreBtn(show) {
   const provider = getImageProvider();
-  const isSearch = ['pixabay', 'unsplash', 'pexels'].includes(provider);
+  const isSearch = ['pixabay', 'flickr', 'unsplash', 'pexels'].includes(provider);
   document.getElementById('imgLoadMoreBtn').style.display = (show && isSearch) ? '' : 'none';
 }
 
@@ -1564,6 +1574,36 @@ function _pixabaySearch(word, k, grid, status, page, append) {
     };
     document.head.appendChild(script);
   });
+}
+
+// Flickr
+async function _flickrSearch(word, k, grid, status, page, append) {
+  if (!k.flickr) { toast('Add your Flickr key in ⚙ API Keys.', 'error'); return; }
+  if (!append) _imgLoading(grid, 'Searching Flickr…');
+  try {
+    const url = `https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=${k.flickr}&text=${encodeURIComponent(word)}&sort=relevance&content_type=1&media=photos&safe_search=1&per_page=12&page=${page}&extras=url_q,url_z,url_b&format=json&nojsoncallback=1`;
+    const res = await fetch(url);
+    if (!res.ok) { _imgError(grid, `Flickr error: ${res.status}`); return; }
+    const data = await res.json();
+    if (data.stat !== 'ok') { _imgError(grid, `Flickr: ${data.message || 'error'}`); return; }
+    const photos = data.photos?.photo || [];
+    if (!photos.length) {
+      if (!append) grid.innerHTML = `<div style="grid-column:1/-1;color:var(--muted);font-size:0.85rem;">No images found. Try a different word.</div>`;
+      _imgLoadMoreBtn(false);
+      return;
+    }
+    if (!append) grid.innerHTML = '';
+    photos.forEach(photo => {
+      const thumb = photo.url_q || `https://live.staticflickr.com/${photo.server}/${photo.id}_${photo.secret}_q.jpg`;
+      const full  = photo.url_z || photo.url_b || `https://live.staticflickr.com/${photo.server}/${photo.id}_${photo.secret}_z.jpg`;
+      const div = document.createElement('div');
+      div.className = 'image-thumb';
+      div.innerHTML = `<img src="${thumb}" loading="lazy" alt="" /><div class="check">✓</div>`;
+      div.onclick = () => selectImage(div, full, thumb);
+      grid.appendChild(div);
+    });
+    _imgLoadMoreBtn(photos.length === 12);
+  } catch(e) { _imgError(grid, `Flickr error: ${e.message}`); }
 }
 
 // Unsplash
@@ -2301,7 +2341,7 @@ loadEditorState();
 updatePreview();
 
 const k = getKeys();
-const _imgKey = { pixabay: k.pixabay, replicate: k.replicate, openai: k.openai_image, gemini: k.gemini }[k.imageProvider];
+const _imgKey = { pixabay: k.pixabay, flickr: k.flickr, unsplash: k.unsplash, pexels: k.pexels, replicate: k.replicate, openai: k.openai_image, gemini: k.gemini }[k.imageProvider];
 if (!_imgKey && !k.anthropic) setTimeout(openSettings, 400);
 
 // ── Pull-to-refresh (standalone/PWA only) ──
