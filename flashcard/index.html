@@ -927,6 +927,7 @@
           <option value="flickr">Flickr</option>
           <option value="unsplash">Unsplash</option>
           <option value="pexels">Pexels</option>
+          <option value="freepik">Freepik</option>
         </select>
         <select class="small-input" id="imageLang" style="flex:0 0 auto; width:auto;">
           <option value="de" selected>DE</option>
@@ -946,6 +947,7 @@
           onkeydown="if(event.key==='Enter') useImageUrl()" />
         <button class="btn btn-sm" onclick="useImageUrl()">Use</button>
         <button class="btn btn-sm" id="imgClearBtn" onclick="clearImage()" style="display:none;color:var(--muted);">✕</button>
+        <button class="btn btn-sm" id="googleImgBtn" onclick="openGoogleImages()" title="Open Google Images in a new tab, then right-click → Copy image address and paste above">Google ↗</button>
       </div>
     </div>
 
@@ -1085,6 +1087,9 @@
     <label>Pexels API Key <a href="https://www.pexels.com/api/" target="_blank">Get Key ↗</a></label>
     <input id="keyPexels" type="text" placeholder="Enter Pexels key..." />
 
+    <label>Freepik API Key <a href="https://www.freepik.com/api" target="_blank">Get Key ↗</a></label>
+    <input id="keyFreepik" type="text" placeholder="Enter Freepik key..." />
+
     <label style="display:none">Replicate API Token <a href="https://replicate.com/account/api-tokens" target="_blank">Get Key ↗</a></label>
     <input id="keyReplicate" type="text" placeholder="r8_…" style="display:none" />
 
@@ -1148,6 +1153,7 @@ function clearStorage() {
   localStorage.removeItem('wk_flickr');
   localStorage.removeItem('wk_unsplash');
   localStorage.removeItem('wk_pexels');
+  localStorage.removeItem('wk_freepik');
   localStorage.removeItem('wk_replicate');
   localStorage.removeItem('wk_openai_image');
   localStorage.removeItem('wk_gemini');
@@ -1183,6 +1189,7 @@ function getKeys() {
     flickr:       localStorage.getItem('wk_flickr') || '',
     unsplash:     localStorage.getItem('wk_unsplash') || '',
     pexels:       localStorage.getItem('wk_pexels') || '',
+    freepik:      localStorage.getItem('wk_freepik') || '',
     replicate:    localStorage.getItem('wk_replicate') || '',
     openai_image: localStorage.getItem('wk_openai_image') || '',
     gemini:       localStorage.getItem('wk_gemini') || '',
@@ -1198,6 +1205,7 @@ function openSettings() {
   document.getElementById('keyFlickr').value = k.flickr;
   document.getElementById('keyUnsplash').value = k.unsplash;
   document.getElementById('keyPexels').value = k.pexels;
+  document.getElementById('keyFreepik').value = k.freepik;
   document.getElementById('keyReplicate').value = k.replicate;
   document.getElementById('keyOpenaiImage').value = k.openai_image;
   document.getElementById('keyGemini').value = k.gemini;
@@ -1212,6 +1220,7 @@ function saveSettings() {
   localStorage.setItem('wk_flickr', document.getElementById('keyFlickr').value.trim());
   localStorage.setItem('wk_unsplash', document.getElementById('keyUnsplash').value.trim());
   localStorage.setItem('wk_pexels', document.getElementById('keyPexels').value.trim());
+  localStorage.setItem('wk_freepik', document.getElementById('keyFreepik').value.trim());
   localStorage.setItem('wk_replicate', document.getElementById('keyReplicate').value.trim());
   localStorage.setItem('wk_openai_image', document.getElementById('keyOpenaiImage').value.trim());
   localStorage.setItem('wk_gemini', document.getElementById('keyGemini').value.trim());
@@ -1224,7 +1233,7 @@ function saveSettings() {
 
 function updateApiStatus() {
   const k = getKeys();
-  const imgKey = { pixabay: k.pixabay, flickr: k.flickr, unsplash: k.unsplash, pexels: k.pexels, replicate: k.replicate, openai: k.openai_image, gemini: k.gemini }[k.imageProvider];
+  const imgKey = { pixabay: k.pixabay, flickr: k.flickr, unsplash: k.unsplash, pexels: k.pexels, freepik: k.freepik, replicate: k.replicate, openai: k.openai_image, gemini: k.gemini }[k.imageProvider];
   const el = document.getElementById('api-status');
   el.innerHTML = [
     `<span class="status-dot ${imgKey ? 'ok' : 'missing'}"></span><span style="font-size:0.75rem;color:var(--muted);margin-right:8px;font-family:var(--font-mono);">Images</span>`,
@@ -1472,7 +1481,7 @@ async function generateDefinitions(pArg) {
 // ── Image search / generation ──
 function updateImageSectionUI() {
   const k = getKeys();
-  const keyFor = { pixabay: k.pixabay, flickr: k.flickr, unsplash: k.unsplash, pexels: k.pexels };
+  const keyFor = { pixabay: k.pixabay, flickr: k.flickr, unsplash: k.unsplash, pexels: k.pexels, freepik: k.freepik };
   const sel = document.getElementById('imageProvider');
 
   // Gray out options with no key
@@ -1511,6 +1520,7 @@ function searchImages(word) {
   if (provider === 'flickr') return _flickrSearch(word, k, grid, status, 1, false);
   if (provider === 'unsplash') return _unsplashSearch(word, k, grid, status, 1, false);
   if (provider === 'pexels') return _pexelsSearch(word, k, grid, status, 1, false);
+  if (provider === 'freepik') return _freepikSearch(word, k, grid, status, 1, false);
   if (provider === 'replicate') return _replicateGenerate(word, k, grid, status);
   if (provider === 'openai') return _openaiGenerate(word, k, grid, status);
   if (provider === 'gemini') return _geminiGenerate(word, k, grid, status);
@@ -1528,11 +1538,12 @@ function loadMoreImages() {
   if (provider === 'flickr') return _flickrSearch(_imgLastQuery, k, grid, status, _imgPage, true);
   if (provider === 'unsplash') return _unsplashSearch(_imgLastQuery, k, grid, status, _imgPage, true);
   if (provider === 'pexels') return _pexelsSearch(_imgLastQuery, k, grid, status, _imgPage, true);
+  if (provider === 'freepik') return _freepikSearch(_imgLastQuery, k, grid, status, _imgPage, true);
 }
 
 function _imgLoadMoreBtn(show) {
   const provider = getImageProvider();
-  const isSearch = ['pixabay', 'flickr', 'unsplash', 'pexels'].includes(provider);
+  const isSearch = ['pixabay', 'flickr', 'unsplash', 'pexels', 'freepik'].includes(provider);
   document.getElementById('imgLoadMoreBtn').style.display = (show && isSearch) ? '' : 'none';
 }
 
@@ -1685,6 +1696,37 @@ async function _pexelsSearch(word, k, grid, status, page, append) {
   } catch(e) { _imgError(grid, `Pexels error: ${e.message}`); }
 }
 
+// Freepik
+async function _freepikSearch(word, k, grid, status, page, append) {
+  if (!k.freepik) { toast('Add your Freepik key in ⚙ API Keys.', 'error'); return; }
+  if (!append) _imgLoading(grid, 'Searching Freepik…');
+  try {
+    const lang = document.getElementById('imageLang').value;
+    const locale = `${lang}-${lang.toUpperCase()}`;
+    const res = await fetch(`https://api.freepik.com/v1/resources?term=${encodeURIComponent(word)}&page=${page}&limit=12&filters[content_type][photo]=1`, {
+      headers: { 'x-freepik-api-key': k.freepik, 'Accept-Language': locale }
+    });
+    if (!res.ok) { _imgError(grid, `Freepik error: ${res.status}`); return; }
+    const data = await res.json();
+    if (!data.data?.length) {
+      if (!append) grid.innerHTML = `<div style="grid-column:1/-1;color:var(--muted);font-size:0.85rem;">No images found. Try a different word.</div>`;
+      _imgLoadMoreBtn(false);
+      return;
+    }
+    if (!append) grid.innerHTML = '';
+    data.data.forEach(item => {
+      const url = item.image?.source?.url;
+      if (!url) return;
+      const div = document.createElement('div');
+      div.className = 'image-thumb';
+      div.innerHTML = `<img src="${url}" loading="lazy" alt="" /><div class="check">✓</div>`;
+      div.onclick = () => selectImage(div, url, url);
+      grid.appendChild(div);
+    });
+    _imgLoadMoreBtn(data.data.length === 12);
+  } catch(e) { _imgError(grid, `Freepik error: ${e.message}`); }
+}
+
 // Replicate (flux-schnell)
 async function _replicateGenerate(prompt, k, grid, status) {
   if (!k.replicate) { toast('Add your Replicate API token in ⚙ API Keys.', 'error'); return; }
@@ -1787,6 +1829,12 @@ async function useImageUrl() {
   const resized = await resizeImage(url);
   selectedImage = { url: resized };
   updatePreview();
+}
+
+function openGoogleImages() {
+  const q = document.getElementById('imageQuery').value.trim();
+  const lang = document.getElementById('imageLang').value;
+  window.open(`https://www.google.com/search?q=${encodeURIComponent(q)}&tbm=isch&hl=${lang}&lr=lang_${lang}`, '_blank');
 }
 
 function clearImage() {
