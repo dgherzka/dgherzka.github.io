@@ -923,15 +923,19 @@
       <div style="display:flex;gap:6px;margin-bottom:6px;">
         <select class="small-input" id="imageProvider" style="flex:0 0 auto; width:auto;"
           onchange="localStorage.setItem('wk_image_provider', this.value); updateImageSectionUI();">
-          <option value="pixabay">Pixabay</option>
-          <option value="flickr">Flickr</option>
-          <option value="unsplash">Unsplash</option>
-          <option value="pexels">Pexels</option>
-          <option value="freepik">Freepik</option>
         </select>
         <select class="small-input" id="imageLang" style="flex:0 0 auto; width:auto;">
           <option value="de" selected>DE</option>
           <option value="en">EN</option>
+        </select>
+        <select class="small-input" id="browseExternal" style="flex:0 0 auto; width:auto; color:var(--muted);"
+          onchange="openExternalSearch(this)">
+          <option value="">Browse ↗</option>
+          <option value="google">Google Images</option>
+          <option value="freepik">Freepik</option>
+          <option value="adobestock">Adobe Stock</option>
+          <option value="getty">Getty Images</option>
+          <option value="unsplash">Unsplash</option>
         </select>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:8px;">
@@ -943,11 +947,11 @@
       </div>
       <button class="btn btn-sm" id="imgLoadMoreBtn" onclick="loadMoreImages()" style="display:none;width:100%;margin-top:6px;">Load more</button>
       <div style="display:flex;gap:6px;margin-top:6px;">
-        <input class="small-input" id="imageUrlInput" placeholder="or paste image URL…"
-          onkeydown="if(event.key==='Enter') useImageUrl()" />
+        <input class="small-input" id="imageUrlInput" placeholder="paste image or URL…"
+          onkeydown="if(event.key==='Enter') useImageUrl()"
+          onpaste="handleImagePaste(event)" />
         <button class="btn btn-sm" onclick="useImageUrl()">Use</button>
         <button class="btn btn-sm" id="imgClearBtn" onclick="clearImage()" style="display:none;color:var(--muted);">✕</button>
-        <button class="btn btn-sm" id="googleImgBtn" onclick="openGoogleImages()" title="Open Google Images in a new tab, then right-click → Copy image address and paste above">Google ↗</button>
       </div>
     </div>
 
@@ -1075,20 +1079,7 @@
     <h2>Settings</h2>
     <p>Your keys are stored only in your browser's localStorage and never sent anywhere except the respective APIs.</p>
 
-    <label>Pixabay API Key <a href="https://pixabay.com/api/docs" target="_blank">Get Key ↗</a></label>
-    <input id="keyPixabay" type="text" placeholder="Enter Pixabay key..." />
-
-    <label>Unsplash Access Key <a href="https://unsplash.com/developers" target="_blank">Get Key ↗</a></label>
-    <input id="keyUnsplash" type="text" placeholder="Enter Unsplash access key..." />
-
-    <label>Flickr API Key <a href="https://www.flickr.com/services/apps/create/" target="_blank">Get Key ↗</a></label>
-    <input id="keyFlickr" type="text" placeholder="Enter Flickr key..." />
-
-    <label>Pexels API Key <a href="https://www.pexels.com/api/" target="_blank">Get Key ↗</a></label>
-    <input id="keyPexels" type="text" placeholder="Enter Pexels key..." />
-
-    <label>Freepik API Key <a href="https://www.freepik.com/api" target="_blank">Get Key ↗</a></label>
-    <input id="keyFreepik" type="text" placeholder="Enter Freepik key..." />
+    <div id="imgKeyFields"></div>
 
     <label style="display:none">Replicate API Token <a href="https://replicate.com/account/api-tokens" target="_blank">Get Key ↗</a></label>
     <input id="keyReplicate" type="text" placeholder="r8_…" style="display:none" />
@@ -1149,11 +1140,7 @@ function clearStorage() {
   localStorage.removeItem('wk_deck');
   localStorage.removeItem('wk_editor');
   localStorage.removeItem('wk_image_provider');
-  localStorage.removeItem('wk_pixabay');
-  localStorage.removeItem('wk_flickr');
-  localStorage.removeItem('wk_unsplash');
-  localStorage.removeItem('wk_pexels');
-  localStorage.removeItem('wk_freepik');
+  IMAGE_PROVIDERS.forEach(p => localStorage.removeItem(p.storageKey));
   localStorage.removeItem('wk_replicate');
   localStorage.removeItem('wk_openai_image');
   localStorage.removeItem('wk_gemini');
@@ -1182,30 +1169,34 @@ function handleRevealEnd(el) {
   clearTimeout(revealTimeout);
 }
 
+// ── Image Provider Registry ──
+// To add a new search provider, add one entry here. Nothing else needs changing.
+const IMAGE_PROVIDERS = [
+  { id: 'pixabay',  label: 'Pixabay',  storageKey: 'wk_pixabay',  keyLabel: 'Pixabay API Key',    keyUrl: 'https://pixabay.com/api/docs',                 placeholder: 'Enter Pixabay key…',         fn: _pixabaySearch  },
+  { id: 'flickr',   label: 'Flickr',   storageKey: 'wk_flickr',   keyLabel: 'Flickr API Key',      keyUrl: 'https://www.flickr.com/services/apps/create/', placeholder: 'Enter Flickr key…',          fn: _flickrSearch   },
+  { id: 'unsplash', label: 'Unsplash', storageKey: 'wk_unsplash', keyLabel: 'Unsplash Access Key', keyUrl: 'https://unsplash.com/developers',               placeholder: 'Enter Unsplash access key…', fn: _unsplashSearch },
+  { id: 'pexels',   label: 'Pexels',   storageKey: 'wk_pexels',   keyLabel: 'Pexels API Key',      keyUrl: 'https://www.pexels.com/api/',                  placeholder: 'Enter Pexels key…',          fn: _pexelsSearch   },
+  // Freepik omitted: their API does not set CORS headers, so browser-side fetch is blocked.
+  // A server-side proxy would be required to use it here.
+];
+
 // ── Keys ──
 function getKeys() {
-  return {
-    pixabay:      localStorage.getItem('wk_pixabay') || '',
-    flickr:       localStorage.getItem('wk_flickr') || '',
-    unsplash:     localStorage.getItem('wk_unsplash') || '',
-    pexels:       localStorage.getItem('wk_pexels') || '',
-    freepik:      localStorage.getItem('wk_freepik') || '',
+  const k = {
     replicate:    localStorage.getItem('wk_replicate') || '',
     openai_image: localStorage.getItem('wk_openai_image') || '',
     gemini:       localStorage.getItem('wk_gemini') || '',
     anthropic:    localStorage.getItem('wk_anthropic') || '',
     imageProvider: localStorage.getItem('wk_image_provider') || 'pixabay',
   };
+  IMAGE_PROVIDERS.forEach(p => { k[p.id] = localStorage.getItem(p.storageKey) || ''; });
+  return k;
 }
 function getImageProvider() { const el = document.getElementById('imageProvider'); return el ? el.value : (localStorage.getItem('wk_image_provider') || 'pixabay'); }
 
 function openSettings() {
   const k = getKeys();
-  document.getElementById('keyPixabay').value = k.pixabay;
-  document.getElementById('keyFlickr').value = k.flickr;
-  document.getElementById('keyUnsplash').value = k.unsplash;
-  document.getElementById('keyPexels').value = k.pexels;
-  document.getElementById('keyFreepik').value = k.freepik;
+  IMAGE_PROVIDERS.forEach(p => { document.getElementById(`key_${p.id}`).value = k[p.id]; });
   document.getElementById('keyReplicate').value = k.replicate;
   document.getElementById('keyOpenaiImage').value = k.openai_image;
   document.getElementById('keyGemini').value = k.gemini;
@@ -1216,11 +1207,7 @@ function closeSettings() {
   document.getElementById('settingsModal').classList.remove('open');
 }
 function saveSettings() {
-  localStorage.setItem('wk_pixabay', document.getElementById('keyPixabay').value.trim());
-  localStorage.setItem('wk_flickr', document.getElementById('keyFlickr').value.trim());
-  localStorage.setItem('wk_unsplash', document.getElementById('keyUnsplash').value.trim());
-  localStorage.setItem('wk_pexels', document.getElementById('keyPexels').value.trim());
-  localStorage.setItem('wk_freepik', document.getElementById('keyFreepik').value.trim());
+  IMAGE_PROVIDERS.forEach(p => { localStorage.setItem(p.storageKey, document.getElementById(`key_${p.id}`).value.trim()); });
   localStorage.setItem('wk_replicate', document.getElementById('keyReplicate').value.trim());
   localStorage.setItem('wk_openai_image', document.getElementById('keyOpenaiImage').value.trim());
   localStorage.setItem('wk_gemini', document.getElementById('keyGemini').value.trim());
@@ -1233,7 +1220,9 @@ function saveSettings() {
 
 function updateApiStatus() {
   const k = getKeys();
-  const imgKey = { pixabay: k.pixabay, flickr: k.flickr, unsplash: k.unsplash, pexels: k.pexels, freepik: k.freepik, replicate: k.replicate, openai: k.openai_image, gemini: k.gemini }[k.imageProvider];
+  const imgKeyMap = { replicate: k.replicate, openai: k.openai_image, gemini: k.gemini };
+  IMAGE_PROVIDERS.forEach(p => { imgKeyMap[p.id] = k[p.id]; });
+  const imgKey = imgKeyMap[k.imageProvider];
   const el = document.getElementById('api-status');
   el.innerHTML = [
     `<span class="status-dot ${imgKey ? 'ok' : 'missing'}"></span><span style="font-size:0.75rem;color:var(--muted);margin-right:8px;font-family:var(--font-mono);">Images</span>`,
@@ -1481,26 +1470,40 @@ async function generateDefinitions(pArg) {
 // ── Image search / generation ──
 function updateImageSectionUI() {
   const k = getKeys();
-  const keyFor = { pixabay: k.pixabay, flickr: k.flickr, unsplash: k.unsplash, pexels: k.pexels, freepik: k.freepik };
   const sel = document.getElementById('imageProvider');
+
+  // Populate dropdown from registry if not yet done
+  if (sel.options.length !== IMAGE_PROVIDERS.length) {
+    sel.innerHTML = IMAGE_PROVIDERS.map(p => `<option value="${p.id}">${p.label}</option>`).join('');
+  }
+
+  // Populate settings key fields from registry if not yet done
+  const container = document.getElementById('imgKeyFields');
+  if (!container.querySelector('input')) {
+    container.innerHTML = IMAGE_PROVIDERS.map(p =>
+      `<label>${p.keyLabel} <a href="${p.keyUrl}" target="_blank">Get Key ↗</a></label>` +
+      `<input id="key_${p.id}" type="text" placeholder="${p.placeholder}" />`
+    ).join('\n');
+  }
 
   // Gray out options with no key
   Array.from(sel.options).forEach(opt => {
-    const hasKey = !!keyFor[opt.value];
+    const p = IMAGE_PROVIDERS.find(ip => ip.id === opt.value);
+    const hasKey = p ? !!k[p.id] : true;
     opt.disabled = !hasKey;
     opt.style.color = hasKey ? '' : 'var(--muted)';
   });
 
   // If current selection has no key, switch to first available
   const saved = localStorage.getItem('wk_image_provider') || '';
-  const firstValid = Object.keys(keyFor).find(p => keyFor[p]);
-  if (saved && keyFor[saved]) {
+  const firstValid = IMAGE_PROVIDERS.find(p => k[p.id])?.id;
+  if (saved && IMAGE_PROVIDERS.find(p => p.id === saved) && k[saved]) {
     sel.value = saved;
   } else if (firstValid) {
     sel.value = firstValid;
     localStorage.setItem('wk_image_provider', firstValid);
   } else {
-    sel.value = 'pixabay'; // fallback — no keys configured
+    sel.value = IMAGE_PROVIDERS[0].id;
   }
 }
 
@@ -1516,11 +1519,8 @@ function searchImages(word) {
   selectedImage = null;
   status.textContent = '';
 
-  if (provider === 'pixabay') return _pixabaySearch(word, k, grid, status, 1, false);
-  if (provider === 'flickr') return _flickrSearch(word, k, grid, status, 1, false);
-  if (provider === 'unsplash') return _unsplashSearch(word, k, grid, status, 1, false);
-  if (provider === 'pexels') return _pexelsSearch(word, k, grid, status, 1, false);
-  if (provider === 'freepik') return _freepikSearch(word, k, grid, status, 1, false);
+  const p = IMAGE_PROVIDERS.find(ip => ip.id === provider);
+  if (p) return p.fn(word, k, grid, status, 1, false);
   if (provider === 'replicate') return _replicateGenerate(word, k, grid, status);
   if (provider === 'openai') return _openaiGenerate(word, k, grid, status);
   if (provider === 'gemini') return _geminiGenerate(word, k, grid, status);
@@ -1534,16 +1534,13 @@ function loadMoreImages() {
   const k = getKeys();
   const grid = document.getElementById('imageGrid');
   const status = document.getElementById('img-status');
-  if (provider === 'pixabay') return _pixabaySearch(_imgLastQuery, k, grid, status, _imgPage, true);
-  if (provider === 'flickr') return _flickrSearch(_imgLastQuery, k, grid, status, _imgPage, true);
-  if (provider === 'unsplash') return _unsplashSearch(_imgLastQuery, k, grid, status, _imgPage, true);
-  if (provider === 'pexels') return _pexelsSearch(_imgLastQuery, k, grid, status, _imgPage, true);
-  if (provider === 'freepik') return _freepikSearch(_imgLastQuery, k, grid, status, _imgPage, true);
+  const p = IMAGE_PROVIDERS.find(ip => ip.id === provider);
+  if (p) return p.fn(_imgLastQuery, k, grid, status, _imgPage, true);
 }
 
 function _imgLoadMoreBtn(show) {
   const provider = getImageProvider();
-  const isSearch = ['pixabay', 'flickr', 'unsplash', 'pexels', 'freepik'].includes(provider);
+  const isSearch = IMAGE_PROVIDERS.some(p => p.id === provider);
   document.getElementById('imgLoadMoreBtn').style.display = (show && isSearch) ? '' : 'none';
 }
 
@@ -1819,9 +1816,47 @@ async function selectImage(el, fullUrl, thumbUrl) {
   updatePreview();
 }
 
+function handleImagePaste(event) {
+  const item = Array.from(event.clipboardData.items).find(i => i.type.startsWith('image/'));
+  if (!item) return;
+  event.preventDefault();
+  const blob = item.getAsFile();
+  const reader = new FileReader();
+  reader.onload = async e => {
+    const dataUrl = e.target.result;
+    selectedImage = { url: dataUrl };
+    document.getElementById('imgClearBtn').style.display = '';
+    document.getElementById('imageUrlInput').value = '';
+    document.querySelectorAll('.image-thumb').forEach(t => t.classList.remove('selected'));
+    updatePreview();
+    const resized = await resizeImage(dataUrl);
+    selectedImage = { url: resized };
+    updatePreview();
+  };
+  reader.readAsDataURL(blob);
+}
+
+// If `url` points to an image page rather than a raw image file, fetch og:image from it.
+async function resolveImagePageUrl(url) {
+  if (/\.(jpe?g|png|gif|webp|svg|avif)(\?.*)?$/i.test(url)) return url;
+  try {
+    const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return url;
+    const html = await res.text();
+    const match = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+                || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+    if (match?.[1]) return match[1];
+  } catch(e) { /* fall through to original url */ }
+  return url;
+}
+
 async function useImageUrl() {
-  const url = document.getElementById('imageUrlInput').value.trim();
-  if (!url) return;
+  const raw = document.getElementById('imageUrlInput').value.trim();
+  if (!raw) return;
+  const status = document.getElementById('img-status');
+  status.textContent = 'Resolving…';
+  const url = await resolveImagePageUrl(raw);
+  status.textContent = '';
   selectedImage = { url };
   document.getElementById('imgClearBtn').style.display = '';
   document.querySelectorAll('.image-thumb').forEach(t => t.classList.remove('selected'));
@@ -1831,10 +1866,18 @@ async function useImageUrl() {
   updatePreview();
 }
 
-function openGoogleImages() {
+function openExternalSearch(sel) {
   const q = document.getElementById('imageQuery').value.trim();
   const lang = document.getElementById('imageLang').value;
-  window.open(`https://www.google.com/search?q=${encodeURIComponent(q)}&tbm=isch&hl=${lang}&lr=lang_${lang}`, '_blank');
+  const urls = {
+    google:     `https://www.google.com/search?q=${encodeURIComponent(q)}&tbm=isch&hl=${lang}&lr=lang_${lang}`,
+    freepik:    `https://www.freepik.com/search?query=${encodeURIComponent(q)}&type=photo&lang=${lang}`,
+    adobestock: `https://stock.adobe.com/search?k=${encodeURIComponent(q)}&search_type=usertyped`,
+    getty:      `https://www.gettyimages.com/photos/${encodeURIComponent(q.replace(/\s+/g, '-'))}`,
+    unsplash:   `https://unsplash.com/s/photos/${encodeURIComponent(q.replace(/\s+/g, '-'))}`,
+  };
+  if (urls[sel.value]) window.open(urls[sel.value], '_blank');
+  sel.value = '';
 }
 
 function clearImage() {
@@ -2445,7 +2488,8 @@ loadEditorState();
 updatePreview();
 
 const k = getKeys();
-const _imgKey = { pixabay: k.pixabay, flickr: k.flickr, unsplash: k.unsplash, pexels: k.pexels, replicate: k.replicate, openai: k.openai_image, gemini: k.gemini }[k.imageProvider];
+const _initProvider = IMAGE_PROVIDERS.find(p => p.id === k.imageProvider);
+const _imgKey = _initProvider ? k[_initProvider.id] : ({ replicate: k.replicate, openai: k.openai_image, gemini: k.gemini }[k.imageProvider]);
 if (!_imgKey && !k.anthropic) setTimeout(openSettings, 400);
 
 // ── Pull-to-refresh (standalone/PWA only) ──
