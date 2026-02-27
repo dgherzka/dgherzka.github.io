@@ -1527,6 +1527,7 @@ function _imgShowSingle(grid, status, dataUrl) {
   selectedImage = { url: dataUrl };
   status.textContent = 'generated';
   updatePreview();
+  resizeImage(dataUrl).then(resized => { selectedImage = { url: resized }; });
 }
 
 // Pixabay (JSONP search)
@@ -1719,20 +1720,47 @@ async function _geminiGenerate(prompt, k, grid, status) {
   } catch(e) { _imgError(grid, `Gemini error: ${e.message}`); }
 }
 
-function selectImage(el, fullUrl, thumbUrl) {
+function resizeImage(url, maxPx = 512) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > maxPx || h > maxPx) {
+        if (w >= h) { h = Math.round(h * maxPx / w); w = maxPx; }
+        else        { w = Math.round(w * maxPx / h); h = maxPx; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      try { resolve(canvas.toDataURL('image/jpeg', 0.85)); }
+      catch(_) { resolve(url); } // CORS-tainted canvas fallback
+    };
+    img.onerror = () => resolve(url);
+    img.src = url;
+  });
+}
+
+async function selectImage(el, fullUrl, thumbUrl) {
   document.querySelectorAll('.image-thumb').forEach(t => t.classList.remove('selected'));
   el.classList.add('selected');
   selectedImage = { url: fullUrl, thumb: thumbUrl };
   document.getElementById('imgClearBtn').style.display = '';
   updatePreview();
+  const resized = await resizeImage(fullUrl);
+  selectedImage = { url: resized, thumb: thumbUrl };
+  updatePreview();
 }
 
-function useImageUrl() {
+async function useImageUrl() {
   const url = document.getElementById('imageUrlInput').value.trim();
   if (!url) return;
   selectedImage = { url };
   document.getElementById('imgClearBtn').style.display = '';
   document.querySelectorAll('.image-thumb').forEach(t => t.classList.remove('selected'));
+  updatePreview();
+  const resized = await resizeImage(url);
+  selectedImage = { url: resized };
   updatePreview();
 }
 
