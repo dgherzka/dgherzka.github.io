@@ -1391,6 +1391,17 @@ async function searchAll() {
   btn.textContent = 'Search All';
 }
 
+function _randomDefStyle() {
+  const styles = [
+    'Focus on the most common everyday meaning.',
+    'Focus on the literal or original meaning.',
+    'Emphasise a figurative or idiomatic use if one exists.',
+    'Lead with a concrete, tangible sense of the word.',
+    'Highlight what makes this word distinct from near-synonyms.',
+  ];
+  return styles[Math.floor(Math.random() * styles.length)];
+}
+
 async function generateDefinitions(pArg) {
   const k = getKeys();
   if (!k.anthropic) return;
@@ -1398,6 +1409,11 @@ async function generateDefinitions(pArg) {
   const word = p.word || '';
   if (!word) return;
   const article = p.gender ? p.gender + ' ' : '';
+  const rawQuery = document.getElementById('entryInput').value.trim();
+  const queryHint = rawQuery && rawQuery.toLowerCase() !== word.toLowerCase()
+    ? ` The user's original query was "${rawQuery}" — if that implies a specific meaning or context, focus on that.`
+    : '';
+  const style = _randomDefStyle();
   const btn = document.getElementById('defBtn');
   if (btn) { btn.innerHTML = '<span class="spinner"></span>'; btn.disabled = true; }
 
@@ -1414,7 +1430,7 @@ async function generateDefinitions(pArg) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 120,
-        messages: [{ role: 'user', content: `Give a very concise English dictionary definition (1-5 words) for the German word "${article}${word}". Return ONLY the definition text. No sentences, no preamble, no word repetition (e.g. return 'fast', not 'Schnell means fast').` }]
+        messages: [{ role: 'user', content: `Give a very concise English dictionary definition (1-5 words) for the German word "${article}${word}".${queryHint} ${style} Return ONLY the definition text, no preamble, no word repetition.` }]
       })
     });
     const dataEN = await resEN.json();
@@ -1433,7 +1449,7 @@ async function generateDefinitions(pArg) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 120,
-        messages: [{ role: 'user', content: `Geben Sie eine sehr kurze deutsche Definition (maximal 10 Wörter) für das Wort "${article}${word}". Nur der Text der Definition, keine Einleitung.` }]
+        messages: [{ role: 'user', content: `Gib eine sehr kurze deutsche Definition (max. 10 Wörter) für "${article}${word}".${queryHint} ${style} Nur der Definitionstext, keine Einleitung.` }]
       })
     });
     const dataDE = await resDE.json();
@@ -1905,9 +1921,12 @@ async function generateSentence(pArg) {
         temperature: 1.0,
         messages: [{
           role: 'user',
-          content: `Create ONE short, natural German example sentence using the word "${p.gender ? p.gender + ' ' : ''}${word}". ${_randomSentenceHint()} Reply in exactly this format:
-DE: <German sentence>
-EN: <English translation>`
+          content: (()=>{
+            const rawQuery = document.getElementById('entryInput').value.trim();
+            const qHint = rawQuery && rawQuery.toLowerCase() !== word.toLowerCase()
+              ? ` The user's original query was "${rawQuery}" — reflect that specific meaning.` : '';
+            return `Create ONE short, natural German example sentence using the word "${p.gender ? p.gender + ' ' : ''}${word}".${qHint} ${_randomSentenceHint()} Reply in exactly this format:\nDE: <German sentence>\nEN: <English translation>`;
+          })()
         }]
       })
     });
