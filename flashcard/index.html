@@ -143,6 +143,8 @@
     gap: 6px;
     margin-top: 8px;
     align-items: flex-start;
+    width: 100%;
+    min-width: 0;
   }
   .parsed-tags.visible { display: flex; }
 
@@ -167,6 +169,8 @@
     border-radius: var(--radius);
     padding: 4px 9px;
     flex-shrink: 0;
+    max-width: 100%;
+    min-width: 0;
   }
   .parsed-chip label {
     font-family: var(--font-mono);
@@ -183,7 +187,8 @@
     color: var(--accent);
     font-family: var(--font-mono);
     font-size: 0.82rem;
-    flex-shrink: 0;
+    flex-shrink: 1;
+    min-width: 0;
     padding: 0;
   }
   .parsed-chip input:focus { outline: none; }
@@ -447,6 +452,10 @@
     color: #f0e8d8;
     line-height: 1.15;
     margin: 2px 0 4px;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    max-width: 100%;
+    text-align: center;
   }
   .card-plural {
     font-size: 13px;
@@ -628,7 +637,7 @@
   .mini-article.der { color: var(--der); }
   .mini-article.die { color: var(--die); }
   .mini-article.das { color: var(--das); }
-  .mini-word { font-family: Georgia, serif; font-size: 24px; font-weight: 700; color: #f0e8d8; margin: 1px 0 3px; }
+  .mini-word { font-family: Georgia, serif; font-size: 24px; font-weight: 700; color: #f0e8d8; margin: 1px 0 3px; overflow-wrap: break-word; word-break: break-word; max-width: 100%; text-align: center; }
   .mini-plural { font-size: 11px; color: #aaaaaa; font-style: italic; margin-bottom: 6px; }
   .mini-sentence { font-size: 12px; color: #f0e8d8; line-height: 1.5; margin: 6px 0 2px; text-align: center; }
   .mini-translation { font-size: 10px; color: #888888; line-height: 1.4; text-align: center; }
