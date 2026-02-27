@@ -1,6 +1,6 @@
 {
-  "name": "Wortschatz",
-  "short_name": "Wortschatz",
+  "name": "Flashcard Studio",
+  "short_name": "Flashcard Studio",
   "start_url": "/flashcard/",
   "display": "standalone",
   "background_color": "#121212",
