@@ -877,6 +877,10 @@
   <h1>Flashcard Studio</h1>
   <div class="header-right">
     <span id="api-status"></span>
+    <select id="appLang" class="btn btn-sm" style="font-family:var(--font-mono);font-size:0.85rem;" onchange="setLang(this.value)">
+      <option value="de">DE</option>
+      <option value="zh">ZH</option>
+    </select>
     <button class="btn" onclick="openSettings()" style="font-size:1.1rem;padding:5px 10px;line-height:1;">⚙</button>
   </div>
 </header>
@@ -1137,8 +1141,15 @@ function emptyDeck() {
 
 function clearStorage() {
   if (!confirm('This will delete your saved deck and API keys. Are you sure?')) return;
+  // Legacy keys
   localStorage.removeItem('wk_deck');
   localStorage.removeItem('wk_editor');
+  // Per-language keys
+  Object.values(LANGUAGES).forEach(l => {
+    localStorage.removeItem(`wk_deck_${l.code}`);
+    localStorage.removeItem(`wk_editor_${l.code}`);
+  });
+  localStorage.removeItem('wk_lang');
   localStorage.removeItem('wk_image_provider');
   IMAGE_PROVIDERS.forEach(p => localStorage.removeItem(p.storageKey));
   localStorage.removeItem('wk_replicate');
@@ -1150,8 +1161,18 @@ function clearStorage() {
   updateApiStatus();
   toast('Local storage cleared.', '');
 }
-function saveDeck() { try { localStorage.setItem('wk_deck', JSON.stringify(deck)); } catch(e) {} }
-function loadDeck() { try { const d = localStorage.getItem('wk_deck'); if (d) deck = JSON.parse(d); } catch(e) {} }
+function saveDeck() {
+  try { localStorage.setItem(`wk_deck_${getLang().code}`, JSON.stringify(deck)); } catch(e) {}
+}
+function loadDeck() {
+  try {
+    // One-time migration: copy legacy wk_deck → wk_deck_de
+    const legacy = localStorage.getItem('wk_deck');
+    if (legacy && !localStorage.getItem('wk_deck_de')) localStorage.setItem('wk_deck_de', legacy);
+    const d = localStorage.getItem(`wk_deck_${getLang().code}`);
+    deck = d ? JSON.parse(d) : [];
+  } catch(e) { deck = []; }
+}
 let selectedImage = null;
 let _imgPage = 1;
 let _imgLastQuery = '';
@@ -1167,6 +1188,80 @@ function handleRevealStart(el) {
 }
 function handleRevealEnd(el) {
   clearTimeout(revealTimeout);
+}
+
+// ── Language Registry ──
+// To add a new language, add one entry here and a prompt branch in parseEntry/generateDefinitions/generateSentence/translateSentence/checkSentence.
+const LANGUAGES = {
+  de: {
+    name: 'German', code: 'de', ttsLocale: 'de-DE',
+    wiktionarySection: 'German',
+    linguaLibreId: 'Q188', linguaLibreLang: 'deu', audioPrefix: 'De', audioCodes: ['de'],
+    linguaLibreSpeakers: ['Natschoba', 'Sperwir'],
+    articles: ['der','die','das'],
+    articleColors: { der:'#e05c5c', die:'#5ca8e0', das:'#5ce09a' },
+    sentencePrefix: 'DE', translationLang: 'English',
+    imageLangCode: 'de', imageLangOptions: [{value:'de',label:'DE'},{value:'en',label:'EN'}],
+    inputPlaceholder: 'Hund · der Hund · laufen · dog …',
+    defNativePlaceholder: 'German definition…', sentNativePlaceholder: 'German sentence…',
+    ankiDeckName: 'German Vocab',
+    ankiNativeSentenceField: 'Sentence_DE', ankiNativeDefField: 'Definition_DE',
+    renderExtraChips: null,
+  },
+  zh: {
+    name: 'Mandarin', code: 'zh', ttsLocale: 'zh-CN',
+    wiktionarySection: 'Chinese',
+    linguaLibreId: 'Q36228', linguaLibreLang: 'cmn', audioPrefix: 'Zh', audioCodes: ['zh', 'cmn'],
+    linguaLibreSpeakers: [],
+    articles: [], articleColors: {},
+    sentencePrefix: 'ZH', translationLang: 'English',
+    imageLangCode: 'zh', imageLangOptions: [{value:'zh',label:'ZH'},{value:'en',label:'EN'}],
+    inputPlaceholder: '狗 · gǒu · dog …',
+    defNativePlaceholder: 'Chinese definition…', sentNativePlaceholder: 'Chinese sentence…',
+    ankiDeckName: 'Mandarin Vocab',
+    ankiNativeSentenceField: 'Sentence_ZH', ankiNativeDefField: 'Definition_ZH',
+    renderExtraChips: null,  // hook: fn(p, chipFn) → html string for language-specific chips
+  },
+};
+
+function getLang() {
+  return LANGUAGES[localStorage.getItem('wk_lang') || 'de'] || LANGUAGES.de;
+}
+
+function setLang(code) {
+  if (!LANGUAGES[code]) return;
+  const entry = document.getElementById('entryInput');
+  if (entry && entry.value.trim()) {
+    if (!confirm(`Switch to ${LANGUAGES[code].name}? Your current card editor will be cleared.`)) {
+      document.getElementById('appLang').value = getLang().code;
+      return;
+    }
+  }
+  localStorage.setItem('wk_lang', code);
+  clearCard();
+  loadDeck();
+  renderDeck();
+  applyLang();
+}
+
+function applyLang() {
+  const lang = getLang();
+  document.body.setAttribute('data-lang', lang.code);
+  // imageLang dropdown options
+  const imageLangSel = document.getElementById('imageLang');
+  if (imageLangSel) {
+    imageLangSel.innerHTML = lang.imageLangOptions.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+    imageLangSel.value = lang.imageLangCode;
+  }
+  // Placeholders
+  const el = id => document.getElementById(id);
+  if (el('entryInput'))        el('entryInput').placeholder       = lang.inputPlaceholder;
+  if (el('definitionDEInput')) el('definitionDEInput').placeholder = lang.defNativePlaceholder;
+  if (el('sentDE'))            el('sentDE').placeholder            = lang.sentNativePlaceholder;
+  // Translate button label
+  if (el('translateBtn'))      el('translateBtn').textContent      = `EN→${lang.sentencePrefix}`;
+  // App lang selector value
+  if (el('appLang'))           el('appLang').value                 = lang.code;
 }
 
 // ── Image Provider Registry ──
@@ -1248,6 +1343,10 @@ function getParsed() {
       auxiliary:   chipVal('chip-aux')         || (parsedWord.forms?.auxiliary   || ''),
       comparative: chipVal('chip-comp')        || (parsedWord.forms?.comparative || ''),
       superlative: chipVal('chip-superl')      || (parsedWord.forms?.superlative || ''),
+      // Mandarin chips
+      pinyin:      chipVal('chip-pinyin')      || (parsedWord.forms?.pinyin      || ''),
+      measure_word: chipVal('chip-measure')    || (parsedWord.forms?.measure_word || ''),
+      traditional: chipVal('chip-trad')        || (parsedWord.forms?.traditional || ''),
     }
   };
 }
@@ -1261,24 +1360,36 @@ function renderChips(p) {
   const chip = (id, label, val) =>
     `<div class="parsed-chip"><label>${label}</label><input id="${id}" value="${String(val??'').replace(/"/g,'&quot;')}" style="width:${chipW(val)}px" oninput="this.style.width=Math.max(24,this.value.length*8+6)+'px';updatePreview()"></div>`;
 
+  const lang = getLang();
   let html = `<span class="pos-badge">${pos || '?'}</span>`;
   html += chip('chip-word', 'word', p.word);
 
-  if (pos === 'noun') {
-    const gClass = ['der','die','das'].includes(p.gender) ? p.gender : '';
-    html += `<div class="parsed-chip"><label>article</label><input id="chip-gender" class="gender-inp ${gClass}" value="${p.gender||''}" style="width:${chipW(p.gender||'der')}px" oninput="updateGenderChip(this)"></div>`;
-    html += chip('chip-plural', 'plural', p.plural);
-  }
-  if (pos === 'verb') {
-    html += chip('chip-past',       'simple past',  p.forms?.past);
-    html += chip('chip-participle', 'participle',   p.forms?.participle);
-    if (p.forms?.auxiliary) html += chip('chip-aux', 'aux', p.forms.auxiliary);
-  }
-  if (pos === 'adjective') {
-    html += chip('chip-comp',   'comp.',   p.forms?.comparative);
-    html += chip('chip-superl', 'superl.', p.forms?.superlative);
+  if (lang.articles.length > 0) {
+    // Language with grammatical articles (e.g. German)
+    if (pos === 'noun') {
+      const gClass = lang.articles.includes(p.gender) ? p.gender : '';
+      html += `<div class="parsed-chip"><label>article</label><input id="chip-gender" class="gender-inp ${gClass}" value="${p.gender||''}" style="width:${chipW(p.gender||lang.articles[0])}px" oninput="updateGenderChip(this)"></div>`;
+      html += chip('chip-plural', 'plural', p.plural);
+    }
+    if (pos === 'verb') {
+      html += chip('chip-past',       'simple past',  p.forms?.past);
+      html += chip('chip-participle', 'participle',   p.forms?.participle);
+      if (p.forms?.auxiliary) html += chip('chip-aux', 'aux', p.forms.auxiliary);
+    }
+    if (pos === 'adjective') {
+      html += chip('chip-comp',   'comp.',   p.forms?.comparative);
+      html += chip('chip-superl', 'superl.', p.forms?.superlative);
+    }
+  } else {
+    // No-article language (e.g. Mandarin): show pinyin, measure word, traditional
+    if (p.forms?.pinyin)       html += chip('chip-pinyin',   'pinyin',      p.forms.pinyin);
+    if (pos === 'noun' && p.forms?.measure_word)
+                               html += chip('chip-measure',  '量词',         p.forms.measure_word);
+    if (p.forms?.traditional && p.forms.traditional !== p.word)
+                               html += chip('chip-trad',     'traditional', p.forms.traditional);
   }
   if (p.commonness) html += chip('chip-commonness', 'commonness', p.commonness);
+  if (lang.renderExtraChips)  html += lang.renderExtraChips(p, chip);
 
   container.innerHTML = html;
   container.classList.add('visible');
@@ -1287,7 +1398,7 @@ function renderChips(p) {
 
 function updateGenderChip(inp) {
   const v = inp.value.trim().toLowerCase();
-  inp.className = 'gender-inp ' + (['der','die','das'].includes(v) ? v : '');
+  inp.className = 'gender-inp ' + (getLang().articles.includes(v) ? v : '');
   updatePreview();
 }
 
@@ -1296,28 +1407,37 @@ async function parseEntry(raw) {
   const k = getKeys();
   const query = raw.trim();
 
+  const lang = getLang();
+
   if (!k.anthropic) {
     const parts = query.split(/\s+/);
-    const maybeArticle = ['der','die','das'].includes(parts[0]?.toLowerCase()) ? parts[0].toLowerCase() : '';
+    const maybeArticle = lang.articles.includes(parts[0]?.toLowerCase()) ? parts[0].toLowerCase() : '';
     const word = maybeArticle ? parts.slice(1).join(' ') : query;
     renderChips({ word, gender: maybeArticle, plural: '', pos: 'noun', forms: {}, commonness: '' });
     return word || query;
   }
 
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': k.anthropic,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
-        messages: [{ role: 'user', content:
-`You are helping build a German flashcard. Interpret the user's query and identify the intended German vocabulary item. The query could be:
+  const parsePrompt = lang.code === 'zh'
+    ? `You are helping build a Mandarin Chinese flashcard. Interpret the user's query and identify the intended Mandarin vocabulary item. The query could be:
+- A Chinese word/character (e.g. "狗", "跑", "漂亮")
+- An English word or phrase to translate into Mandarin — marked with hints like "(en)", "(English)", "English word for...", etc.
+- A description or clue (e.g. "the word for dog", "the Mandarin word for running")
+
+Return ONLY a JSON object (no markdown). The "word" field must be simplified Chinese characters.
+
+"${query}"
+
+{
+  "word": "<simplified Chinese characters, bare form>",
+  "pos": "<noun|verb|adjective|adverb|preposition|conjunction|particle|other>",
+  "commonness": <integer 1–10, where 1 is extremely rare and 10 is extremely common in everyday Mandarin>,
+  "forms": {
+    "pinyin": "<pinyin romanization with tone marks, e.g. gǒu>",
+    "measure_word": "<measure word 量词, nouns only, else empty string>",
+    "traditional": "<traditional character form, or same as word if identical>"
+  }
+}`
+    : `You are helping build a German flashcard. Interpret the user's query and identify the intended German vocabulary item. The query could be:
 - A German word, optionally with its article (e.g. "der Hund", "laufen", "schön")
 - An English word or phrase to translate into German — marked with hints like "(en)", "(English)", "English word for...", etc. When translating from English, treat the input as English and find the German equivalent. Do NOT map it to a visually similar German word (e.g. "wand" in English means a magic stick → "der Stab", not the German word "Wand").
 - A description or clue (e.g. "the most common word for a seat on a bus", "an archaic word for dinner", "the German word for meeting that starts with T")
@@ -1339,8 +1459,21 @@ Return ONLY a JSON object (no markdown). The "word" field must be the bare lemma
     "comparative": "<comparative form, adjectives only, else empty string>",
     "superlative": "<superlative without 'am', adjectives only, else empty string>"
   }
-}`
-        }]
+}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': k.anthropic,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        messages: [{ role: 'user', content: parsePrompt }]
       })
     });
     const data = await res.json();
@@ -1348,10 +1481,10 @@ Return ONLY a JSON object (no markdown). The "word" field must be the bare lemma
     const p = JSON.parse(text.replace(/^```json\s*|^```\s*|```\s*$/gm,'').trim());
     // Strip article from word if LLM included it despite instructions
     let word = (p.word || query).trim();
-    for (const art of ['der ', 'die ', 'das ']) {
-      if (word.toLowerCase().startsWith(art)) {
-        if (!p.gender) p.gender = art.trim();
-        word = word.slice(art.length);
+    for (const art of lang.articles) {
+      if (word.toLowerCase().startsWith(art + ' ')) {
+        if (!p.gender) p.gender = art;
+        word = word.slice(art.length + 1);
         break;
       }
     }
@@ -1412,6 +1545,7 @@ function _randomDefStyle() {
 async function generateDefinitions(pArg) {
   const k = getKeys();
   if (!k.anthropic) return;
+  const lang = getLang();
   const p = pArg || getParsed();
   const word = p.word || '';
   if (!word) return;
@@ -1437,14 +1571,17 @@ async function generateDefinitions(pArg) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 120,
-        messages: [{ role: 'user', content: `Give a very concise English dictionary definition (1-5 words) for the German word "${article}${word}".${queryHint} ${style} Return ONLY the definition text, no preamble, no word repetition.` }]
+        messages: [{ role: 'user', content: `Give a very concise English dictionary definition (1-5 words) for the ${lang.name} word "${article}${word}".${queryHint} ${style} Return ONLY the definition text, no preamble, no word repetition.` }]
       })
     });
     const dataEN = await resEN.json();
     const defEN = dataEN.content?.[0]?.text?.trim();
     if (defEN) document.getElementById('definitionInput').value = defEN;
 
-    // German Definition
+    // Native language definition
+    const nativeDefPrompt = lang.code === 'zh'
+      ? `用中文给出"${word}"的一个非常简短的定义（最多15个字）。${rawQuery && rawQuery !== word ? `用户的原始查询是"${rawQuery}"，请聚焦于该含义。` : ''} 只返回定义文本，不要任何前缀。`
+      : `Gib eine sehr kurze deutsche Definition (max. 10 Wörter) für "${article}${word}".${queryHint} ${style} Nur der Definitionstext, keine Einleitung.`;
     const resDE = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -1456,7 +1593,7 @@ async function generateDefinitions(pArg) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 120,
-        messages: [{ role: 'user', content: `Gib eine sehr kurze deutsche Definition (max. 10 Wörter) für "${article}${word}".${queryHint} ${style} Nur der Definitionstext, keine Einleitung.` }]
+        messages: [{ role: 'user', content: nativeDefPrompt }]
       })
     });
     const dataDE = await resDE.json();
@@ -1931,12 +2068,14 @@ async function searchAudio(word) {
 }
 
 async function findWiktionaryAudio(word) {
+  const lang = getLang();
   try {
     const wtRes = await fetch(`https://en.wiktionary.org/w/api.php?action=parse&page=${encodeURIComponent(word)}&prop=wikitext&format=json&origin=*`);
     const wtData = await wtRes.json();
     const wikitext = wtData?.parse?.wikitext?.['*'] || '';
-    const deSection = wikitext.match(/==German==([\s\S]*?)(?:^==[^=]|\Z)/m)?.[1] || wikitext;
-    const audioMatch = deSection.match(/\{\{audio\|de\|([^|}]+)/i);
+    const langSection = wikitext.match(new RegExp(`==${lang.wiktionarySection}==([\\s\\S]*?)(?:^==[^=]|\\Z)`, 'm'))?.[1] || wikitext;
+    const audioRegex = new RegExp('\\{\\{audio\\|(?:' + lang.audioCodes.join('|') + ')\\|([^|}]+)', 'i');
+    const audioMatch = langSection.match(audioRegex);
     if (audioMatch) {
       const filename = audioMatch[1].trim();
       // Disallow .ogg files
@@ -1949,9 +2088,8 @@ async function findWiktionaryAudio(word) {
 
   // iOS workaround: Prioritize .wav files (Lingua Libre recordings) exclusively
   const candidates = [
-    `LL-Q188 (deu)-Natschoba-${word}.wav`,
-    `LL-Q188 (deu)-Sperwir-${word}.wav`,
-    `De-${word}.wav`
+    ...lang.linguaLibreSpeakers.map(s => `LL-${lang.linguaLibreId} (${lang.linguaLibreLang})-${s}-${word}.wav`),
+    `${lang.audioPrefix}-${word}.wav`
   ];
   for (const name of candidates) {
     const url = await getCommonsUrl(name);
@@ -1977,7 +2115,7 @@ function playSelectedAudio() {
     const word = getParsed().word || document.getElementById('entryInput').value.trim();
     if (!word) return;
     const u = new SpeechSynthesisUtterance(word);
-    u.lang = 'de-DE';
+    u.lang = getLang().ttsLocale;
     speechSynthesis.speak(u);
   }
 }
@@ -1998,6 +2136,8 @@ function _randomSentenceHint() {
 async function generateSentence(pArg) {
   const k = getKeys();
   if (!k.anthropic) { toast('Add your Anthropic key in ⚙ API Keys.', 'error'); return; }
+  const lang = getLang();
+  const prefix = lang.sentencePrefix;
   const p = pArg || getParsed();
   const word = p.word || '';
   if (!word) { toast('Enter a word first.', 'error'); return; }
@@ -2025,16 +2165,18 @@ async function generateSentence(pArg) {
             const rawQuery = document.getElementById('entryInput').value.trim();
             const qHint = rawQuery && rawQuery.toLowerCase() !== word.toLowerCase()
               ? ` The user's original query was "${rawQuery}" — reflect that specific meaning.` : '';
-            return `Create ONE short, natural German example sentence using the word "${p.gender ? p.gender + ' ' : ''}${word}".${qHint} ${_randomSentenceHint()} Reply in exactly this format:\nDE: <German sentence>\nEN: <English translation>`;
+            return lang.code === 'zh'
+              ? `Create ONE short, natural Mandarin Chinese example sentence using the word "${word}".${qHint} ${_randomSentenceHint()} Reply in exactly this format:\n${prefix}: <Chinese sentence>\nEN: <English translation>`
+              : `Create ONE short, natural German example sentence using the word "${p.gender ? p.gender + ' ' : ''}${word}".${qHint} ${_randomSentenceHint()} Reply in exactly this format:\n${prefix}: <German sentence>\nEN: <English translation>`;
           })()
         }]
       })
     });
     const data = await res.json();
     const text = data.content?.[0]?.text || '';
-    const deMatch = text.match(/DE:\s*(.+)/);
+    const nativeMatch = text.match(new RegExp(prefix + ':\\s*(.+)'));
     const enMatch = text.match(/EN:\s*(.+)/);
-    if (deMatch) document.getElementById('sentDE').value = deMatch[1].trim();
+    if (nativeMatch) document.getElementById('sentDE').value = nativeMatch[1].trim();
     if (enMatch) document.getElementById('sentEN').value = enMatch[1].trim();
     updatePreview();
   } catch(e) { toast('Sentence generation failed.', 'error'); }
@@ -2045,6 +2187,8 @@ async function generateSentence(pArg) {
 async function translateSentence() {
   const k = getKeys();
   if (!k.anthropic) { toast('Add your Anthropic key in ⚙ API Keys.', 'error'); return; }
+  const lang = getLang();
+  const prefix = lang.sentencePrefix;
   const en = document.getElementById('sentEN').value.trim();
   if (!en) { toast('Enter an English sentence first.', 'error'); return; }
   const p = getParsed();
@@ -2068,24 +2212,18 @@ async function translateSentence() {
         max_tokens: 200,
         messages: [{
           role: 'user',
-          content: `Translate this English sentence into natural German, and the translation must use the word "${p.gender ? p.gender + ' ' : ''}${word}" (or an inflected form of it).
-
-English: "${en}"
-
-If the sentence can be naturally translated using that word, reply with exactly:
-DE: <German translation>
-
-If it cannot be naturally translated using "${word}", reply with exactly:
-ERROR: <brief reason>`
+          content: lang.code === 'zh'
+            ? `Translate this English sentence into natural Mandarin Chinese, and the translation must use the word "${word}" (or an equivalent form of it).\n\nEnglish: "${en}"\n\nIf the sentence can be naturally translated using that word, reply with exactly:\n${prefix}: <Chinese translation>\n\nIf it cannot be naturally translated using "${word}", reply with exactly:\nERROR: <brief reason>`
+            : `Translate this English sentence into natural German, and the translation must use the word "${p.gender ? p.gender + ' ' : ''}${word}" (or an inflected form of it).\n\nEnglish: "${en}"\n\nIf the sentence can be naturally translated using that word, reply with exactly:\n${prefix}: <German translation>\n\nIf it cannot be naturally translated using "${word}", reply with exactly:\nERROR: <brief reason>`
         }]
       })
     });
     const data = await res.json();
     const text = data.content?.[0]?.text?.trim() || '';
-    const deMatch = text.match(/^DE:\s*(.+)/m);
+    const nativeMatch = text.match(new RegExp(`^${prefix}:\\s*(.+)`, 'm'));
     const errMatch = text.match(/^ERROR:\s*(.+)/m);
-    if (deMatch) {
-      document.getElementById('sentDE').value = deMatch[1].trim();
+    if (nativeMatch) {
+      document.getElementById('sentDE').value = nativeMatch[1].trim();
       updatePreview();
     } else if (errMatch) {
       toast(`Can't translate: ${errMatch[1].trim()}`, 'error');
@@ -2093,7 +2231,7 @@ ERROR: <brief reason>`
       toast('Translation failed.', 'error');
     }
   } catch(e) { toast('Translation failed.', 'error'); }
-  btn.innerHTML = 'EN→DE';
+  btn.innerHTML = `EN→${prefix}`;
   btn.disabled = false;
 }
 
@@ -2122,7 +2260,7 @@ async function checkSentence() {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 400,
-        messages: [{ role: 'user', content: `You are a German teacher. Check this sentence: "${de}". Reply ONLY with a JSON object: {"grammar": {"status": "ok|warn|bad", "comment": "..."}, "naturalness": {"status": "ok|warn|bad", "comment": "..."}, "corrected": "corrected version or empty"}` }]
+        messages: [{ role: 'user', content: `You are a ${getLang().name} teacher. Check this sentence: "${de}". Reply ONLY with a JSON object: {"grammar": {"status": "ok|warn|bad", "comment": "..."}, "naturalness": {"status": "ok|warn|bad", "comment": "..."}, "corrected": "corrected version or empty"}` }]
       })
     });
     const data = await res.json();
@@ -2145,7 +2283,7 @@ function applyCorrected(text) {
 // ── Preview update ──
 function saveEditorState() {
   try {
-    localStorage.setItem('wk_editor', JSON.stringify({
+    localStorage.setItem(`wk_editor_${getLang().code}`, JSON.stringify({
       entry:    document.getElementById('entryInput').value,
       parsed:   parsedWord,
       sentDE:   document.getElementById('sentDE').value,
@@ -2161,7 +2299,7 @@ function saveEditorState() {
 
 function loadEditorState() {
   try {
-    const raw = localStorage.getItem('wk_editor');
+    const raw = localStorage.getItem(`wk_editor_${getLang().code}`) || localStorage.getItem('wk_editor');
     if (!raw) return;
     const s = JSON.parse(raw);
     if (s.entry) document.getElementById('entryInput').value = s.entry;
@@ -2192,9 +2330,14 @@ function updatePreview() {
   artEl.className = 'card-article ' + (p.gender || '');
 
   let sub = '';
-  if (p.gender && p.plural)                             sub = `Pl. ${p.plural}`;
-  else if (p.pos === 'verb' && p.forms?.past)           sub = `${p.forms.past} · ${p.forms.participle||''}`;
-  else if (p.pos === 'adjective' && p.forms?.comparative) sub = `${p.forms.comparative} · ${p.forms.superlative||''}`;
+  if (getLang().code === 'zh') {
+    const f = p.forms || {};
+    sub = [f.pinyin, f.traditional && f.traditional !== p.word ? f.traditional : ''].filter(Boolean).join(' · ');
+  } else {
+    if (p.gender && p.plural)                               sub = `Pl. ${p.plural}`;
+    else if (p.pos === 'verb' && p.forms?.past)             sub = `${p.forms.past} · ${p.forms.participle||''}`;
+    else if (p.pos === 'adjective' && p.forms?.comparative) sub = `${p.forms.comparative} · ${p.forms.superlative||''}`;
+  }
   document.getElementById('previewPlural').textContent = sub;
 
   // Visual Swap: German more prominent
@@ -2233,10 +2376,16 @@ function addToDeck() {
   const p = getParsed();
   if (!p.word) return;
 
+  const _addLang = getLang();
   let formsStr = '';
-  if (p.pos === 'noun' && p.plural) formsStr = `Pl. ${p.plural}`;
-  else if (p.pos === 'verb' && p.forms?.past) formsStr = [p.forms.past, p.forms.participle, p.forms.auxiliary ? `(${p.forms.auxiliary})` : ''].filter(Boolean).join(' · ');
-  else if (p.pos === 'adjective' && p.forms?.comparative) formsStr = [p.forms.comparative, p.forms.superlative].filter(Boolean).join(' · ');
+  if (_addLang.code === 'zh') {
+    const f = p.forms || {};
+    formsStr = [f.pinyin, f.measure_word ? `量词: ${f.measure_word}` : '', f.traditional && f.traditional !== p.word ? `繁: ${f.traditional}` : ''].filter(Boolean).join(' · ');
+  } else {
+    if (p.pos === 'noun' && p.plural) formsStr = `Pl. ${p.plural}`;
+    else if (p.pos === 'verb' && p.forms?.past) formsStr = [p.forms.past, p.forms.participle, p.forms.auxiliary ? `(${p.forms.auxiliary})` : ''].filter(Boolean).join(' · ');
+    else if (p.pos === 'adjective' && p.forms?.comparative) formsStr = [p.forms.comparative, p.forms.superlative].filter(Boolean).join(' · ');
+  }
 
   const cardData = {
     word:         p.word,
@@ -2323,6 +2472,7 @@ async function exportApkg() {
   if (deck.length === 0) return;
   toast('Building .apkg…');
   try {
+    const lang = getLang();
     const SQL = await window.initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` });
     const now = Math.floor(Date.now() / 1000);
     const modelId = 1700000000000;
@@ -2372,7 +2522,7 @@ async function exportApkg() {
 
     // Anki Back Template with reveal mechanism
     const model = { [modelId]: {
-      id: String(modelId), name: 'German Vocab', type: 0, mod: now, usn: -1, sortf: 2, did: deckId,
+      id: String(modelId), name: lang.ankiDeckName, type: 0, mod: now, usn: -1, sortf: 2, did: deckId,
       tmpls: [{ name: 'Recognition', ord: 0, qfmt: `<div class='front'>{{Image}}</div>`, afmt: `
         <div class='front'>{{Image}}</div>
         <div class='back'>
@@ -2380,23 +2530,23 @@ async function exportApkg() {
           <div class='word'>{{Word}}</div>
           <div class='pos'>{{Part_of_Speech}}</div>
           <div class='forms'>{{Forms}}</div>
-          <div class='definition-de'>{{Definition_DE}}</div>
+          <div class='definition-de'>{{${lang.ankiNativeDefField}}}</div>
           <div class='definition blur-reveal' onclick="this.classList.toggle('revealed')">{{Definition_EN}}</div>
           <hr>
-          <div class='sentence'>{{Sentence_DE}}</div>
+          <div class='sentence'>{{${lang.ankiNativeSentenceField}}}</div>
           <div class='translation blur-reveal' onclick="this.classList.toggle('revealed')">{{Sentence_EN}}</div>
           <div class='audio-row'>
             <div style='position:relative; display:inline-flex; align-items:center;'>
               {{#Audio}}{{Audio}}{{/Audio}}
               {{^Audio}}
-                <button class='speak-btn' onclick="var u=new SpeechSynthesisUtterance('{{Word}}');u.lang='de-DE';speechSynthesis.speak(u)">▶ Hear it</button>
+                <button class='speak-btn' onclick="var u=new SpeechSynthesisUtterance('{{Word}}');u.lang='${lang.ttsLocale}';speechSynthesis.speak(u)">▶ Hear it</button>
                 <span style='position:absolute; left:calc(100% + 8px); font-size:10px; color:#888; font-family:monospace; white-space:nowrap;'>(TTS)</span>
               {{/Audio}}
             </div>
           </div>
         </div>`
       }],
-      flds: ['Image','Article','Word','Part_of_Speech','Forms','Audio','Sentence_DE','Sentence_EN','Definition_EN','Definition_DE','Commonness'].map((n,i)=>({name:n, ord:i, sticky:false, rtl:false, font:'Arial', size:20, media:[]})),
+      flds: ['Image','Article','Word','Part_of_Speech','Forms','Audio',lang.ankiNativeSentenceField,'Sentence_EN','Definition_EN',lang.ankiNativeDefField,'Commonness'].map((n,i)=>({name:n, ord:i, sticky:false, rtl:false, font:'Arial', size:20, media:[]})),
       css: `
         .card{font-family:Helvetica;text-align:center;background:#1a1a1a;color:#f0e8d8}
         .back{padding:16px;display:flex;flex-direction:column;min-height:200px}
@@ -2419,7 +2569,7 @@ async function exportApkg() {
     }};
 
     const deckObj = {
-      [String(deckId)]: { id: deckId, name: 'German Vocab', conf: 1, desc: '', dyn: 0, collapsed: false, mod: now, usn: -1, lrnToday:[0,0], revToday:[0,0], newToday:[0,0], timeToday:[0,0], extendNew: 10, extendRev: 50 },
+      [String(deckId)]: { id: deckId, name: lang.ankiDeckName, conf: 1, desc: '', dyn: 0, collapsed: false, mod: now, usn: -1, lrnToday:[0,0], revToday:[0,0], newToday:[0,0], timeToday:[0,0], extendNew: 10, extendRev: 50 },
       '1': { id: 1, name: 'Default', conf: 1, desc: '', dyn: 0, collapsed: false, mod: now, usn: -1, lrnToday:[0,0], revToday:[0,0], newToday:[0,0], timeToday:[0,0], extendNew: 10, extendRev: 50 }
     };
 
@@ -2441,7 +2591,7 @@ async function exportApkg() {
     zip.file('media', JSON.stringify(mediaJson));
     for (const [idx, blob] of Object.entries(mediaBlobs)) { zip.file(idx, blob); }
     const blob = await zip.generateAsync({ type: 'blob' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'german.apkg'; a.click();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = lang.code + '.apkg'; a.click();
     toast('Export successful!', 'success');
   } catch(e) { console.error(e); toast('Export failed.', 'error'); }
 }
@@ -2461,7 +2611,7 @@ function clearCard() {
   document.getElementById('sentEN').value = '';
   document.getElementById('definitionInput').value = '';
   document.getElementById('definitionDEInput').value = '';
-  document.getElementById('imageLang').value = 'de';
+  document.getElementById('imageLang').value = getLang().imageLangCode;
   document.getElementById('imageGrid').innerHTML = '';
   document.getElementById('imageUrlInput').value = '';
   document.getElementById('imgClearBtn').style.display = 'none';
@@ -2486,6 +2636,7 @@ updateApiStatus();
 updateImageSectionUI();
 loadEditorState();
 updatePreview();
+applyLang();
 
 const k = getKeys();
 const _initProvider = IMAGE_PROVIDERS.find(p => p.id === k.imageProvider);
