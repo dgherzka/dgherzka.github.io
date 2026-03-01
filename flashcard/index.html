@@ -2247,9 +2247,12 @@ function toggleBrowseDropdown() {
     ['Getty Images',  `https://www.gettyimages.com/photos/${encodeURIComponent(q.replace(/\s+/g, '-'))}`],
     ['Unsplash',      `https://unsplash.com/s/photos/${encodeURIComponent(q.replace(/\s+/g, '-'))}`],
   ];
+  // In PWA standalone mode, navigate in-place so the user can long-press copy images
+  // and swipe back to return. In browser mode, open a new tab.
+  const isPWA = !!window.navigator.standalone;
   const linkStyle = 'display:block;padding:8px 12px;color:var(--text);text-decoration:none;font-size:0.85rem;white-space:nowrap';
   dd.innerHTML = providers.map(([name, url]) =>
-    `<a href="${url}" target="_blank" rel="noopener" style="${linkStyle}" onclick="closeBrowseDropdown()">${name} ↗</a>`
+    `<a href="${url}" ${isPWA ? '' : 'target="_blank" rel="noopener"'} style="${linkStyle}" onclick="closeBrowseDropdown()">${name} ↗</a>`
   ).join('');
   dd.style.display = 'block';
   setTimeout(() => {
