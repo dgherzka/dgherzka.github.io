@@ -917,15 +917,10 @@
           <option value="de" selected>DE</option>
           <option value="en">EN</option>
         </select>
-        <select class="small-input" id="browseExternal" style="flex:0 0 auto; width:auto; color:var(--muted);"
-          onchange="openExternalSearch(this)">
-          <option value="">Browse ↗</option>
-          <option value="google">Google Images</option>
-          <option value="freepik">Freepik</option>
-          <option value="adobestock">Adobe Stock</option>
-          <option value="getty">Getty Images</option>
-          <option value="unsplash">Unsplash</option>
-        </select>
+        <div style="position:relative; flex:0 0 auto;">
+          <button class="small-input" style="color:var(--muted);" onclick="toggleBrowseDropdown()">Browse ↗</button>
+          <div id="browseDropdown" style="display:none; position:absolute; right:0; top:calc(100% + 4px); background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); z-index:100; overflow:hidden; min-width:150px;"></div>
+        </div>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:8px;">
         <input class="small-input" id="imageQuery" placeholder="image search query…"
@@ -2235,22 +2230,26 @@ async function useImageUrl() {
   updatePreview();
 }
 
-function openExternalSearch(sel) {
+function toggleBrowseDropdown() {
+  const dd = document.getElementById('browseDropdown');
+  if (dd.style.display !== 'none') { dd.style.display = 'none'; return; }
   const q = document.getElementById('imageQuery').value.trim();
   const lang = document.getElementById('imageLang').value;
-  const urls = {
-    google:     `https://www.google.com/search?q=${encodeURIComponent(q)}&tbm=isch&hl=${lang}&lr=lang_${lang}`,
-    freepik:    `https://www.freepik.com/search?query=${encodeURIComponent(q)}&type=photo&lang=${lang}`,
-    adobestock: `https://stock.adobe.com/search?k=${encodeURIComponent(q)}&search_type=usertyped`,
-    getty:      `https://www.gettyimages.com/photos/${encodeURIComponent(q.replace(/\s+/g, '-'))}`,
-    unsplash:   `https://unsplash.com/s/photos/${encodeURIComponent(q.replace(/\s+/g, '-'))}`,
-  };
-  if (urls[sel.value]) {
-    const a = document.createElement('a');
-    a.href = urls[sel.value]; a.target = '_blank'; a.rel = 'noopener';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  }
-  sel.value = '';
+  const providers = [
+    ['Google Images', `https://www.google.com/search?q=${encodeURIComponent(q)}&tbm=isch&hl=${lang}&lr=lang_${lang}`],
+    ['Freepik',       `https://www.freepik.com/search?query=${encodeURIComponent(q)}&type=photo&lang=${lang}`],
+    ['Adobe Stock',   `https://stock.adobe.com/search?k=${encodeURIComponent(q)}&search_type=usertyped`],
+    ['Getty Images',  `https://www.gettyimages.com/photos/${encodeURIComponent(q.replace(/\s+/g, '-'))}`],
+    ['Unsplash',      `https://unsplash.com/s/photos/${encodeURIComponent(q.replace(/\s+/g, '-'))}`],
+  ];
+  const linkStyle = 'display:block;padding:8px 12px;color:var(--text);text-decoration:none;font-size:0.85rem;white-space:nowrap';
+  dd.innerHTML = providers.map(([name, url]) =>
+    `<a href="${url}" target="_blank" rel="noopener" style="${linkStyle}" onclick="document.getElementById('browseDropdown').style.display='none'">${name} ↗</a>`
+  ).join('');
+  dd.style.display = 'block';
+  setTimeout(() => document.addEventListener('click', function close(e) {
+    if (!dd.contains(e.target)) { dd.style.display = 'none'; document.removeEventListener('click', close); }
+  }), 0);
 }
 
 function clearImage() {
