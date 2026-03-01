@@ -193,9 +193,6 @@
   }
   .parsed-chip input:focus { outline: none; }
   .parsed-chip input.gender-inp { font-weight: bold; }
-  .parsed-chip input.der { color: var(--der); }
-  .parsed-chip input.die { color: var(--die); }
-  .parsed-chip input.das { color: var(--das); }
 
   .small-input {
     flex: 1;
@@ -442,9 +439,6 @@
     text-transform: lowercase;
     margin-bottom: 2px;
   }
-  .card-article.der { color: var(--der); }
-  .card-article.die { color: var(--die); }
-  .card-article.das { color: var(--das); }
   .card-word {
     font-family: Georgia, serif;
     font-size: 36px;
@@ -569,9 +563,6 @@
     color: var(--accent);
   }
   .deck-item-article { font-size: 0.75rem; margin-right: 4px; font-weight: bold; }
-  .deck-item-article.der { color: var(--der); }
-  .deck-item-article.die { color: var(--die); }
-  .deck-item-article.das { color: var(--das); }
   .deck-item-edit, .deck-item-remove {
     background: none;
     border: 1px solid transparent;
@@ -634,9 +625,6 @@
   }
   .mini-back-body { padding: 12px 14px; display: flex; flex-direction: column; align-items: center; }
   .mini-article { font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: lowercase; margin-bottom: 2px; }
-  .mini-article.der { color: var(--der); }
-  .mini-article.die { color: var(--die); }
-  .mini-article.das { color: var(--das); }
   .mini-word { font-family: Georgia, serif; font-size: 24px; font-weight: 700; color: #f0e8d8; margin: 1px 0 3px; overflow-wrap: break-word; word-break: break-word; max-width: 100%; text-align: center; }
   .mini-plural { font-size: 11px; color: #aaaaaa; font-style: italic; margin-bottom: 6px; }
   .mini-sentence { font-size: 12px; color: #f0e8d8; line-height: 1.5; margin: 6px 0 2px; text-align: center; }
@@ -877,10 +865,7 @@
   <h1>Flashcard Studio</h1>
   <div class="header-right">
     <span id="api-status"></span>
-    <select id="appLang" class="btn btn-sm" style="font-family:var(--font-mono);font-size:0.85rem;" onchange="setLang(this.value)">
-      <option value="de">DE</option>
-      <option value="zh">ZH</option>
-    </select>
+    <select id="appLang" class="btn btn-sm" style="font-family:var(--font-mono);font-size:0.85rem;" onchange="setLang(this.value)"></select>
     <button class="btn" onclick="openSettings()" style="font-size:1.1rem;padding:5px 10px;line-height:1;">⚙</button>
   </div>
 </header>
@@ -1191,7 +1176,7 @@ function handleRevealEnd(el) {
 }
 
 // ── Language Registry ──
-// To add a new language, add one entry here and a prompt branch in parseEntry/generateDefinitions/generateSentence/translateSentence/checkSentence.
+// To add a new language, add one entry here. All language-specific behaviour lives inside the entry.
 const LANGUAGES = {
   de: {
     name: 'German', code: 'de', ttsLocale: 'de-DE',
@@ -1206,7 +1191,67 @@ const LANGUAGES = {
     defNativePlaceholder: 'German definition…', sentNativePlaceholder: 'German sentence…',
     ankiDeckName: 'German Vocab',
     ankiNativeSentenceField: 'Sentence_DE', ankiNativeDefField: 'Definition_DE',
-    renderExtraChips: null,
+    parsePrompt: query => `You are helping build a German flashcard. Interpret the user's query and identify the intended German vocabulary item. The query could be:
+- A German word, optionally with its article (e.g. "der Hund", "laufen", "schön")
+- An English word or phrase to translate into German — marked with hints like "(en)", "(English)", "English word for...", etc. When translating from English, treat the input as English and find the German equivalent. Do NOT map it to a visually similar German word (e.g. "wand" in English means a magic stick → "der Stab", not the German word "Wand").
+- A description or clue (e.g. "the most common word for a seat on a bus", "an archaic word for dinner", "the German word for meeting that starts with T")
+
+Return ONLY a JSON object (no markdown). The "word" field must be the bare lemma WITHOUT any article prefix.
+
+"${query}"
+
+{
+  "word": "<bare German lemma, NO article — e.g. 'Hund' not 'der Hund'>",
+  "pos": "<noun|verb|adjective|adverb|preposition|conjunction|other>",
+  "gender": "<der|die|das> (nouns only, else empty string)",
+  "plural": "<plural form, nouns only, else empty string>",
+  "commonness": <integer 1–10, where 1 is extremely rare and 10 is extremely common in everyday German>,
+  "forms": {
+    "past": "<Präteritum 1st person singular, verbs only, else empty string>",
+    "participle": "<Partizip II, verbs only, else empty string>",
+    "auxiliary": "<hat|ist, verbs only, else empty string>",
+    "comparative": "<comparative form, adjectives only, else empty string>",
+    "superlative": "<superlative without 'am', adjectives only, else empty string>"
+  }
+}`,
+    defNativePrompt: (word, article, rawQuery, queryHint, style) =>
+      `Gib eine sehr kurze deutsche Definition (max. 10 Wörter) für "${article}${word}".${queryHint} ${style} Nur der Definitionstext, keine Einleitung.`,
+    sentencePrompt: (word, gender, qHint, randomHint, prefix) =>
+      `Create ONE short, natural German example sentence using the word "${gender ? gender + ' ' : ''}${word}".${qHint} ${randomHint} Reply in exactly this format:\n${prefix}: <German sentence>\nEN: <English translation>`,
+    translatePrompt: (word, gender, en, prefix) =>
+      `Translate this English sentence into natural German, and the translation must use the word "${gender ? gender + ' ' : ''}${word}" (or an inflected form of it).\n\nEnglish: "${en}"\n\nIf the sentence can be naturally translated using that word, reply with exactly:\n${prefix}: <German translation>\n\nIf it cannot be naturally translated using "${word}", reply with exactly:\nERROR: <brief reason>`,
+    formsStr: p => {
+      if (p.pos === 'noun' && p.plural) return `Pl. ${p.plural}`;
+      if (p.pos === 'verb' && p.forms?.past) return [p.forms.past, p.forms.participle, p.forms.auxiliary ? `(${p.forms.auxiliary})` : ''].filter(Boolean).join(' · ');
+      if (p.pos === 'adjective' && p.forms?.comparative) return [p.forms.comparative, p.forms.superlative].filter(Boolean).join(' · ');
+      return '';
+    },
+    previewSub: p => {
+      if (p.gender && p.plural)                             return `Pl. ${p.plural}`;
+      if (p.pos === 'verb' && p.forms?.past)                return `${p.forms.past} · ${p.forms.participle||''}`;
+      if (p.pos === 'adjective' && p.forms?.comparative)    return `${p.forms.comparative} · ${p.forms.superlative||''}`;
+      return '';
+    },
+    renderChipsBody: (p, chip, chipW) => {
+      const pos = p.pos || '';
+      const lang = getLang();
+      let html = '';
+      if (pos === 'noun') {
+        const color = lang.articleColors[p.gender] || '';
+        html += `<div class="parsed-chip"><label>article</label><input id="chip-gender" class="gender-inp" value="${p.gender||''}" style="width:${chipW(p.gender||lang.articles[0])}px;color:${color}" oninput="updateGenderChip(this)"></div>`;
+        html += chip('chip-plural', 'plural', p.plural);
+      }
+      if (pos === 'verb') {
+        html += chip('chip-past', 'simple past', p.forms?.past);
+        html += chip('chip-participle', 'participle', p.forms?.participle);
+        if (p.forms?.auxiliary) html += chip('chip-aux', 'aux', p.forms.auxiliary);
+      }
+      if (pos === 'adjective') {
+        html += chip('chip-comp', 'comp.', p.forms?.comparative);
+        html += chip('chip-superl', 'superl.', p.forms?.superlative);
+      }
+      return html;
+    },
   },
   zh: {
     name: 'Mandarin', code: 'zh', ttsLocale: 'zh-CN',
@@ -1220,7 +1265,243 @@ const LANGUAGES = {
     defNativePlaceholder: 'Chinese definition…', sentNativePlaceholder: 'Chinese sentence…',
     ankiDeckName: 'Mandarin Vocab',
     ankiNativeSentenceField: 'Sentence_ZH', ankiNativeDefField: 'Definition_ZH',
-    renderExtraChips: null,  // hook: fn(p, chipFn) → html string for language-specific chips
+    parsePrompt: query => `You are helping build a Mandarin Chinese flashcard. Interpret the user's query and identify the intended Mandarin vocabulary item. The query could be:
+- A Chinese word/character (e.g. "狗", "跑", "漂亮")
+- An English word or phrase to translate into Mandarin — marked with hints like "(en)", "(English)", "English word for...", etc.
+- A description or clue (e.g. "the word for dog", "the Mandarin word for running")
+
+Return ONLY a JSON object (no markdown). The "word" field must be simplified Chinese characters.
+
+"${query}"
+
+{
+  "word": "<simplified Chinese characters, bare form>",
+  "pos": "<noun|verb|adjective|adverb|preposition|conjunction|particle|other>",
+  "commonness": <integer 1–10, where 1 is extremely rare and 10 is extremely common in everyday Mandarin>,
+  "forms": {
+    "pinyin": "<pinyin romanization with tone marks, e.g. gǒu>",
+    "measure_word": "<measure word 量词, nouns only, else empty string>",
+    "traditional": "<traditional character form, or same as word if identical>"
+  }
+}`,
+    defNativePrompt: (word, article, rawQuery, queryHint, style) =>
+      `用中文给出"${word}"的一个非常简短的定义（最多15个字）。${rawQuery && rawQuery !== word ? `用户的原始查询是"${rawQuery}"，请聚焦于该含义。` : ''} 只返回定义文本，不要任何前缀。`,
+    sentencePrompt: (word, gender, qHint, randomHint, prefix) =>
+      `Create ONE short, natural Mandarin Chinese example sentence using the word "${word}".${qHint} ${randomHint} Reply in exactly this format:\n${prefix}: <Chinese sentence>\nEN: <English translation>`,
+    translatePrompt: (word, gender, en, prefix) =>
+      `Translate this English sentence into natural Mandarin Chinese, and the translation must use the word "${word}" (or an equivalent form of it).\n\nEnglish: "${en}"\n\nIf the sentence can be naturally translated using that word, reply with exactly:\n${prefix}: <Chinese translation>\n\nIf it cannot be naturally translated using "${word}", reply with exactly:\nERROR: <brief reason>`,
+    formsStr: p => {
+      const f = p.forms || {};
+      return [f.pinyin, f.measure_word ? `量词: ${f.measure_word}` : '', f.traditional && f.traditional !== p.word ? `繁: ${f.traditional}` : ''].filter(Boolean).join(' · ');
+    },
+    previewSub: p => {
+      const f = p.forms || {};
+      return [f.pinyin, f.traditional && f.traditional !== p.word ? f.traditional : ''].filter(Boolean).join(' · ');
+    },
+    renderChipsBody: (p, chip, chipW) => {
+      const pos = p.pos || '';
+      let html = '';
+      if (p.forms?.pinyin) html += chip('chip-pinyin', 'pinyin', p.forms.pinyin);
+      if (pos === 'noun' && p.forms?.measure_word) html += chip('chip-measure', '量词', p.forms.measure_word);
+      if (p.forms?.traditional && p.forms.traditional !== p.word) html += chip('chip-trad', 'traditional', p.forms.traditional);
+      return html;
+    },
+  },
+  es: {
+    name: 'Spanish', code: 'es', ttsLocale: 'es-ES',
+    wiktionarySection: 'Spanish',
+    linguaLibreId: 'Q1321', linguaLibreLang: 'spa', audioPrefix: 'Es', audioCodes: ['es'],
+    linguaLibreSpeakers: [],
+    articles: ['el', 'la'],
+    articleColors: { el: '#c9a84c', la: '#a07bc9' },
+    sentencePrefix: 'ES', translationLang: 'English',
+    imageLangCode: 'es', imageLangOptions: [{value:'es',label:'ES'},{value:'en',label:'EN'}],
+    inputPlaceholder: 'perro · el perro · correr · dog …',
+    defNativePlaceholder: 'Spanish definition…', sentNativePlaceholder: 'Spanish sentence…',
+    ankiDeckName: 'Spanish Vocab',
+    ankiNativeSentenceField: 'Sentence_ES', ankiNativeDefField: 'Definition_ES',
+    parsePrompt: query => `You are helping build a Spanish flashcard. Interpret the user's query and identify the intended Spanish vocabulary item. The query could be:
+- A Spanish word, optionally with its article (e.g. "el perro", "correr", "bonito")
+- An English word or phrase to translate into Spanish — marked with hints like "(en)", "(English)", "English word for...", etc.
+- A description or clue (e.g. "the Spanish word for dog", "a verb meaning to run")
+
+Return ONLY a JSON object (no markdown). The "word" field must be the bare lemma WITHOUT any article prefix.
+
+"${query}"
+
+{
+  "word": "<bare Spanish lemma, NO article — e.g. 'perro' not 'el perro'>",
+  "pos": "<noun|verb|adjective|adverb|preposition|conjunction|other>",
+  "gender": "<el|la> (nouns only, else empty string)",
+  "plural": "<plural form, nouns only, else empty string>",
+  "commonness": <integer 1–10, where 1 is extremely rare and 10 is extremely common in everyday Spanish>,
+  "forms": {
+    "preterite": "<preterite 1st person singular, verbs only, else empty string>",
+    "gerund": "<gerund/present participle, verbs only, else empty string>",
+    "feminine": "<feminine form if different from masculine, adjectives only, else empty string>",
+    "superlative": "<superlative form, adjectives only, else empty string>"
+  }
+}`,
+    defNativePrompt: (word, article, rawQuery, queryHint, style) =>
+      `Da una definición muy breve en español (máx. 10 palabras) para "${article}${word}".${queryHint} ${style} Solo el texto de la definición, sin introducción.`,
+    sentencePrompt: (word, gender, qHint, randomHint, prefix) =>
+      `Create ONE short, natural Spanish example sentence using the word "${gender ? gender + ' ' : ''}${word}".${qHint} ${randomHint} Reply in exactly this format:\n${prefix}: <Spanish sentence>\nEN: <English translation>`,
+    translatePrompt: (word, gender, en, prefix) =>
+      `Translate this English sentence into natural Spanish, and the translation must use the word "${gender ? gender + ' ' : ''}${word}" (or an inflected form of it).\n\nEnglish: "${en}"\n\nIf the sentence can be naturally translated using that word, reply with exactly:\n${prefix}: <Spanish translation>\n\nIf it cannot be naturally translated using "${word}", reply with exactly:\nERROR: <brief reason>`,
+    formsStr: p => {
+      if (p.pos === 'noun' && p.plural) return `Pl. ${p.plural}`;
+      if (p.pos === 'verb' && p.forms?.preterite) return [p.forms.preterite, p.forms.gerund].filter(Boolean).join(' · ');
+      if (p.pos === 'adjective' && p.forms?.feminine) return p.forms.feminine;
+      return '';
+    },
+    previewSub: p => {
+      if (p.gender && p.plural)                         return `Pl. ${p.plural}`;
+      if (p.pos === 'verb' && p.forms?.preterite)       return `${p.forms.preterite} · ${p.forms.gerund||''}`;
+      if (p.pos === 'adjective' && p.forms?.feminine)   return p.forms.feminine;
+      return '';
+    },
+    renderChipsBody: (p, chip, chipW) => {
+      const pos = p.pos || '';
+      const lang = getLang();
+      let html = '';
+      if (pos === 'noun') {
+        const color = lang.articleColors[p.gender] || '';
+        html += `<div class="parsed-chip"><label>article</label><input id="chip-gender" class="gender-inp" value="${p.gender||''}" style="width:${chipW(p.gender||lang.articles[0])}px;color:${color}" oninput="updateGenderChip(this)"></div>`;
+        html += chip('chip-plural', 'plural', p.plural);
+      }
+      if (pos === 'verb') {
+        html += chip('chip-pret', 'preterite', p.forms?.preterite);
+        html += chip('chip-ger', 'gerund', p.forms?.gerund);
+      }
+      if (pos === 'adjective') {
+        html += chip('chip-fem', 'feminine', p.forms?.feminine);
+        html += chip('chip-superl', 'superlative', p.forms?.superlative);
+      }
+      return html;
+    },
+  },
+  ko: {
+    name: 'Korean', code: 'ko', ttsLocale: 'ko-KR',
+    wiktionarySection: 'Korean',
+    linguaLibreId: 'Q9176', linguaLibreLang: 'kor', audioPrefix: 'Ko', audioCodes: ['ko'],
+    linguaLibreSpeakers: [],
+    articles: [], articleColors: {},
+    sentencePrefix: 'KO', translationLang: 'English',
+    imageLangCode: 'ko', imageLangOptions: [{value:'ko',label:'KO'},{value:'en',label:'EN'}],
+    inputPlaceholder: '개 · gae · dog …',
+    defNativePlaceholder: 'Korean definition…', sentNativePlaceholder: 'Korean sentence…',
+    ankiDeckName: 'Korean Vocab',
+    ankiNativeSentenceField: 'Sentence_KO', ankiNativeDefField: 'Definition_KO',
+    parsePrompt: query => `You are helping build a Korean flashcard. Interpret the user's query and identify the intended Korean vocabulary item. The query could be:
+- A Korean word in Hangul (e.g. "개", "달리다", "예쁘다")
+- An English word or phrase to translate into Korean — marked with hints like "(en)", "(English)", "English word for...", etc.
+- A description or clue (e.g. "the Korean word for dog")
+
+Return ONLY a JSON object (no markdown). The "word" field must be the dictionary form in Hangul.
+
+"${query}"
+
+{
+  "word": "<Korean word in Hangul, dictionary/infinitive form>",
+  "pos": "<noun|verb|adjective|adverb|particle|other>",
+  "commonness": <integer 1–10, where 1 is extremely rare and 10 is extremely common in everyday Korean>,
+  "forms": {
+    "romanization": "<Revised Romanization of Korean>",
+    "hanja": "<Chinese character origin if applicable, else empty string>",
+    "polite_present": "<polite informal present tense -아/어요 form, verbs/adjectives only, else empty string>"
+  }
+}`,
+    defNativePrompt: (word, article, rawQuery, queryHint, style) =>
+      `한국어로 "${word}"의 아주 간결한 정의를 내려주세요 (최대 15자).${rawQuery && rawQuery !== word ? ` 사용자의 원래 질문은 "${rawQuery}"이니 그 의미에 집중해 주세요.` : ''} 정의 텍스트만 반환하고 접두사는 붙이지 마세요.`,
+    sentencePrompt: (word, gender, qHint, randomHint, prefix) =>
+      `Create ONE short, natural Korean example sentence using the word "${word}".${qHint} ${randomHint} Reply in exactly this format:\n${prefix}: <Korean sentence>\nEN: <English translation>`,
+    translatePrompt: (word, gender, en, prefix) =>
+      `Translate this English sentence into natural Korean, and the translation must use the word "${word}" (or an appropriate form of it).\n\nEnglish: "${en}"\n\nIf the sentence can be naturally translated using that word, reply with exactly:\n${prefix}: <Korean translation>\n\nIf it cannot be naturally translated using "${word}", reply with exactly:\nERROR: <brief reason>`,
+    formsStr: p => {
+      const f = p.forms || {};
+      return [f.romanization, f.hanja && f.hanja !== p.word ? f.hanja : ''].filter(Boolean).join(' · ');
+    },
+    previewSub: p => {
+      const f = p.forms || {};
+      return [f.romanization, f.hanja && f.hanja !== p.word ? f.hanja : ''].filter(Boolean).join(' · ');
+    },
+    renderChipsBody: (p, chip, chipW) => {
+      let html = '';
+      if (p.forms?.romanization) html += chip('chip-roman', 'romanization', p.forms.romanization);
+      if (p.forms?.hanja && p.forms.hanja !== p.word) html += chip('chip-hanja', 'hanja', p.forms.hanja);
+      if ((p.pos === 'verb' || p.pos === 'adjective') && p.forms?.polite_present)
+        html += chip('chip-pol', 'polite', p.forms.polite_present);
+      return html;
+    },
+  },
+  he: {
+    name: 'Hebrew', code: 'he', ttsLocale: 'he-IL',
+    wiktionarySection: 'Hebrew',
+    linguaLibreId: 'Q9288', linguaLibreLang: 'heb', audioPrefix: 'He', audioCodes: ['he'],
+    linguaLibreSpeakers: [],
+    articles: ['m', 'f'],
+    articleColors: { m: '#5ca8e0', f: '#c05ce0' },
+    sentencePrefix: 'HE', translationLang: 'English',
+    imageLangCode: 'he', imageLangOptions: [{value:'he',label:'HE'},{value:'en',label:'EN'}],
+    inputPlaceholder: 'כלב · kelev · dog …',
+    defNativePlaceholder: 'Hebrew definition…', sentNativePlaceholder: 'Hebrew sentence…',
+    ankiDeckName: 'Hebrew Vocab',
+    ankiNativeSentenceField: 'Sentence_HE', ankiNativeDefField: 'Definition_HE',
+    parsePrompt: query => `You are helping build a Hebrew flashcard. Interpret the user's query and identify the intended Hebrew vocabulary item. The query could be:
+- A Hebrew word (e.g. "כלב", "לרוץ", "יפה")
+- An English word or phrase to translate into Hebrew — marked with hints like "(en)", "(English)", "English word for...", etc.
+- A description or clue (e.g. "the Hebrew word for dog")
+
+Return ONLY a JSON object (no markdown). The "word" field must be in Hebrew script (unvocalized).
+
+"${query}"
+
+{
+  "word": "<Hebrew word, unvocalized, dictionary/infinitive form>",
+  "pos": "<noun|verb|adjective|adverb|preposition|conjunction|other>",
+  "gender": "<m|f> (nouns only, else empty string)",
+  "plural": "<plural form, nouns only, else empty string>",
+  "commonness": <integer 1–10, where 1 is extremely rare and 10 is extremely common in everyday Hebrew>,
+  "forms": {
+    "root": "<3-letter shoresh root, verbs only, else empty string>",
+    "past3ms": "<past tense 3rd person masculine singular, verbs only, else empty string>",
+    "transliteration": "<simple Latin transliteration of the word>"
+  }
+}`,
+    defNativePrompt: (word, article, rawQuery, queryHint, style) =>
+      `תן הגדרה קצרה מאוד בעברית (עד 10 מילים) למילה "${word}".${rawQuery && rawQuery !== word ? ` השאילתה המקורית של המשתמש היא "${rawQuery}" — התמקד במשמעות זו.` : ''} החזר רק את טקסט ההגדרה, ללא כותרת.`,
+    sentencePrompt: (word, gender, qHint, randomHint, prefix) =>
+      `Create ONE short, natural Hebrew example sentence using the word "${word}".${qHint} ${randomHint} Reply in exactly this format:\n${prefix}: <Hebrew sentence>\nEN: <English translation>`,
+    translatePrompt: (word, gender, en, prefix) =>
+      `Translate this English sentence into natural Hebrew, and the translation must use the word "${word}" (or an inflected form of it).\n\nEnglish: "${en}"\n\nIf the sentence can be naturally translated using that word, reply with exactly:\n${prefix}: <Hebrew translation>\n\nIf it cannot be naturally translated using "${word}", reply with exactly:\nERROR: <brief reason>`,
+    formsStr: p => {
+      if (p.pos === 'noun' && p.plural) return `Pl. ${p.plural}`;
+      if (p.pos === 'verb') return [p.forms?.root, p.forms?.past3ms].filter(Boolean).join(' · ');
+      return '';
+    },
+    previewSub: p => {
+      const f = p.forms || {};
+      if (f.transliteration) return f.transliteration;
+      if (p.pos === 'noun' && p.plural) return `Pl. ${p.plural}`;
+      if (p.pos === 'verb') return [f.root, f.past3ms].filter(Boolean).join(' · ');
+      return '';
+    },
+    renderChipsBody: (p, chip, chipW) => {
+      const pos = p.pos || '';
+      const lang = getLang();
+      let html = '';
+      if (pos === 'noun') {
+        const color = lang.articleColors[p.gender] || '';
+        html += `<div class="parsed-chip"><label>gender</label><input id="chip-gender" class="gender-inp" value="${p.gender||''}" style="width:${chipW(p.gender||lang.articles[0])}px;color:${color}" oninput="updateGenderChip(this)"></div>`;
+        html += chip('chip-plural', 'plural', p.plural);
+      }
+      if (pos === 'verb') {
+        html += chip('chip-root', 'root', p.forms?.root);
+        html += chip('chip-past3ms', 'past 3ms', p.forms?.past3ms);
+      }
+      if (p.forms?.transliteration) html += chip('chip-translit', 'translit.', p.forms.transliteration);
+      return html;
+    },
   },
 };
 
@@ -1260,8 +1541,14 @@ function applyLang() {
   if (el('sentDE'))            el('sentDE').placeholder            = lang.sentNativePlaceholder;
   // Translate button label
   if (el('translateBtn'))      el('translateBtn').textContent      = `EN→${lang.sentencePrefix}`;
-  // App lang selector value
-  if (el('appLang'))           el('appLang').value                 = lang.code;
+  // App lang selector — populate dynamically, then set value
+  const appLangSel = el('appLang');
+  if (appLangSel) {
+    if (appLangSel.options.length !== Object.keys(LANGUAGES).length) {
+      appLangSel.innerHTML = Object.keys(LANGUAGES).map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join('');
+    }
+    appLangSel.value = lang.code;
+  }
 }
 
 // ── Image Provider Registry ──
@@ -1338,15 +1625,28 @@ function getParsed() {
     pos:        parsedWord.pos || '',
     commonness: chipVal('chip-commonness') || parsedWord.commonness || '',
     forms:  {
-      past:        chipVal('chip-past')        || (parsedWord.forms?.past        || ''),
-      participle:  chipVal('chip-participle')  || (parsedWord.forms?.participle  || ''),
-      auxiliary:   chipVal('chip-aux')         || (parsedWord.forms?.auxiliary   || ''),
-      comparative: chipVal('chip-comp')        || (parsedWord.forms?.comparative || ''),
-      superlative: chipVal('chip-superl')      || (parsedWord.forms?.superlative || ''),
-      // Mandarin chips
-      pinyin:      chipVal('chip-pinyin')      || (parsedWord.forms?.pinyin      || ''),
-      measure_word: chipVal('chip-measure')    || (parsedWord.forms?.measure_word || ''),
-      traditional: chipVal('chip-trad')        || (parsedWord.forms?.traditional || ''),
+      // German
+      past:           chipVal('chip-past')        || (parsedWord.forms?.past           || ''),
+      participle:     chipVal('chip-participle')  || (parsedWord.forms?.participle     || ''),
+      auxiliary:      chipVal('chip-aux')         || (parsedWord.forms?.auxiliary      || ''),
+      comparative:    chipVal('chip-comp')        || (parsedWord.forms?.comparative    || ''),
+      superlative:    chipVal('chip-superl')      || (parsedWord.forms?.superlative    || ''),
+      // Mandarin
+      pinyin:         chipVal('chip-pinyin')      || (parsedWord.forms?.pinyin         || ''),
+      measure_word:   chipVal('chip-measure')     || (parsedWord.forms?.measure_word   || ''),
+      traditional:    chipVal('chip-trad')        || (parsedWord.forms?.traditional    || ''),
+      // Spanish
+      preterite:      chipVal('chip-pret')        || (parsedWord.forms?.preterite      || ''),
+      gerund:         chipVal('chip-ger')         || (parsedWord.forms?.gerund         || ''),
+      feminine:       chipVal('chip-fem')         || (parsedWord.forms?.feminine       || ''),
+      // Korean
+      romanization:   chipVal('chip-roman')       || (parsedWord.forms?.romanization   || ''),
+      hanja:          chipVal('chip-hanja')       || (parsedWord.forms?.hanja          || ''),
+      polite_present: chipVal('chip-pol')         || (parsedWord.forms?.polite_present || ''),
+      // Hebrew
+      root:           chipVal('chip-root')        || (parsedWord.forms?.root           || ''),
+      past3ms:        chipVal('chip-past3ms')     || (parsedWord.forms?.past3ms        || ''),
+      transliteration: chipVal('chip-translit')   || (parsedWord.forms?.transliteration || ''),
     }
   };
 }
@@ -1364,32 +1664,8 @@ function renderChips(p) {
   let html = `<span class="pos-badge">${pos || '?'}</span>`;
   html += chip('chip-word', 'word', p.word);
 
-  if (lang.articles.length > 0) {
-    // Language with grammatical articles (e.g. German)
-    if (pos === 'noun') {
-      const gClass = lang.articles.includes(p.gender) ? p.gender : '';
-      html += `<div class="parsed-chip"><label>article</label><input id="chip-gender" class="gender-inp ${gClass}" value="${p.gender||''}" style="width:${chipW(p.gender||lang.articles[0])}px" oninput="updateGenderChip(this)"></div>`;
-      html += chip('chip-plural', 'plural', p.plural);
-    }
-    if (pos === 'verb') {
-      html += chip('chip-past',       'simple past',  p.forms?.past);
-      html += chip('chip-participle', 'participle',   p.forms?.participle);
-      if (p.forms?.auxiliary) html += chip('chip-aux', 'aux', p.forms.auxiliary);
-    }
-    if (pos === 'adjective') {
-      html += chip('chip-comp',   'comp.',   p.forms?.comparative);
-      html += chip('chip-superl', 'superl.', p.forms?.superlative);
-    }
-  } else {
-    // No-article language (e.g. Mandarin): show pinyin, measure word, traditional
-    if (p.forms?.pinyin)       html += chip('chip-pinyin',   'pinyin',      p.forms.pinyin);
-    if (pos === 'noun' && p.forms?.measure_word)
-                               html += chip('chip-measure',  '量词',         p.forms.measure_word);
-    if (p.forms?.traditional && p.forms.traditional !== p.word)
-                               html += chip('chip-trad',     'traditional', p.forms.traditional);
-  }
+  html += lang.renderChipsBody(p, chip, chipW);
   if (p.commonness) html += chip('chip-commonness', 'commonness', p.commonness);
-  if (lang.renderExtraChips)  html += lang.renderExtraChips(p, chip);
 
   container.innerHTML = html;
   container.classList.add('visible');
@@ -1398,7 +1674,7 @@ function renderChips(p) {
 
 function updateGenderChip(inp) {
   const v = inp.value.trim().toLowerCase();
-  inp.className = 'gender-inp ' + (getLang().articles.includes(v) ? v : '');
+  inp.style.color = getLang().articleColors[v] || '';
   updatePreview();
 }
 
@@ -1417,49 +1693,7 @@ async function parseEntry(raw) {
     return word || query;
   }
 
-  const parsePrompt = lang.code === 'zh'
-    ? `You are helping build a Mandarin Chinese flashcard. Interpret the user's query and identify the intended Mandarin vocabulary item. The query could be:
-- A Chinese word/character (e.g. "狗", "跑", "漂亮")
-- An English word or phrase to translate into Mandarin — marked with hints like "(en)", "(English)", "English word for...", etc.
-- A description or clue (e.g. "the word for dog", "the Mandarin word for running")
-
-Return ONLY a JSON object (no markdown). The "word" field must be simplified Chinese characters.
-
-"${query}"
-
-{
-  "word": "<simplified Chinese characters, bare form>",
-  "pos": "<noun|verb|adjective|adverb|preposition|conjunction|particle|other>",
-  "commonness": <integer 1–10, where 1 is extremely rare and 10 is extremely common in everyday Mandarin>,
-  "forms": {
-    "pinyin": "<pinyin romanization with tone marks, e.g. gǒu>",
-    "measure_word": "<measure word 量词, nouns only, else empty string>",
-    "traditional": "<traditional character form, or same as word if identical>"
-  }
-}`
-    : `You are helping build a German flashcard. Interpret the user's query and identify the intended German vocabulary item. The query could be:
-- A German word, optionally with its article (e.g. "der Hund", "laufen", "schön")
-- An English word or phrase to translate into German — marked with hints like "(en)", "(English)", "English word for...", etc. When translating from English, treat the input as English and find the German equivalent. Do NOT map it to a visually similar German word (e.g. "wand" in English means a magic stick → "der Stab", not the German word "Wand").
-- A description or clue (e.g. "the most common word for a seat on a bus", "an archaic word for dinner", "the German word for meeting that starts with T")
-
-Return ONLY a JSON object (no markdown). The "word" field must be the bare lemma WITHOUT any article prefix.
-
-"${query}"
-
-{
-  "word": "<bare German lemma, NO article — e.g. 'Hund' not 'der Hund'>",
-  "pos": "<noun|verb|adjective|adverb|preposition|conjunction|other>",
-  "gender": "<der|die|das> (nouns only, else empty string)",
-  "plural": "<plural form, nouns only, else empty string>",
-  "commonness": <integer 1–10, where 1 is extremely rare and 10 is extremely common in everyday German>,
-  "forms": {
-    "past": "<Präteritum 1st person singular, verbs only, else empty string>",
-    "participle": "<Partizip II, verbs only, else empty string>",
-    "auxiliary": "<hat|ist, verbs only, else empty string>",
-    "comparative": "<comparative form, adjectives only, else empty string>",
-    "superlative": "<superlative without 'am', adjectives only, else empty string>"
-  }
-}`;
+  const parsePrompt = lang.parsePrompt(query);
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1579,9 +1813,7 @@ async function generateDefinitions(pArg) {
     if (defEN) document.getElementById('definitionInput').value = defEN;
 
     // Native language definition
-    const nativeDefPrompt = lang.code === 'zh'
-      ? `用中文给出"${word}"的一个非常简短的定义（最多15个字）。${rawQuery && rawQuery !== word ? `用户的原始查询是"${rawQuery}"，请聚焦于该含义。` : ''} 只返回定义文本，不要任何前缀。`
-      : `Gib eine sehr kurze deutsche Definition (max. 10 Wörter) für "${article}${word}".${queryHint} ${style} Nur der Definitionstext, keine Einleitung.`;
+    const nativeDefPrompt = lang.defNativePrompt(word, article, rawQuery, queryHint, style);
     const resDE = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -2161,13 +2393,11 @@ async function generateSentence(pArg) {
         temperature: 1.0,
         messages: [{
           role: 'user',
-          content: (()=>{
+          content: (() => {
             const rawQuery = document.getElementById('entryInput').value.trim();
             const qHint = rawQuery && rawQuery.toLowerCase() !== word.toLowerCase()
               ? ` The user's original query was "${rawQuery}" — reflect that specific meaning.` : '';
-            return lang.code === 'zh'
-              ? `Create ONE short, natural Mandarin Chinese example sentence using the word "${word}".${qHint} ${_randomSentenceHint()} Reply in exactly this format:\n${prefix}: <Chinese sentence>\nEN: <English translation>`
-              : `Create ONE short, natural German example sentence using the word "${p.gender ? p.gender + ' ' : ''}${word}".${qHint} ${_randomSentenceHint()} Reply in exactly this format:\n${prefix}: <German sentence>\nEN: <English translation>`;
+            return lang.sentencePrompt(word, p.gender, qHint, _randomSentenceHint(), prefix);
           })()
         }]
       })
@@ -2212,9 +2442,7 @@ async function translateSentence() {
         max_tokens: 200,
         messages: [{
           role: 'user',
-          content: lang.code === 'zh'
-            ? `Translate this English sentence into natural Mandarin Chinese, and the translation must use the word "${word}" (or an equivalent form of it).\n\nEnglish: "${en}"\n\nIf the sentence can be naturally translated using that word, reply with exactly:\n${prefix}: <Chinese translation>\n\nIf it cannot be naturally translated using "${word}", reply with exactly:\nERROR: <brief reason>`
-            : `Translate this English sentence into natural German, and the translation must use the word "${p.gender ? p.gender + ' ' : ''}${word}" (or an inflected form of it).\n\nEnglish: "${en}"\n\nIf the sentence can be naturally translated using that word, reply with exactly:\n${prefix}: <German translation>\n\nIf it cannot be naturally translated using "${word}", reply with exactly:\nERROR: <brief reason>`
+          content: lang.translatePrompt(word, p.gender, en, prefix)
         }]
       })
     });
@@ -2327,17 +2555,10 @@ function updatePreview() {
   document.getElementById('previewWord').textContent = p.word || '';
   const artEl = document.getElementById('previewArticle');
   artEl.textContent = p.gender || '';
-  artEl.className = 'card-article ' + (p.gender || '');
+  artEl.className = 'card-article';
+  artEl.style.color = getLang().articleColors[p.gender] || '';
 
-  let sub = '';
-  if (getLang().code === 'zh') {
-    const f = p.forms || {};
-    sub = [f.pinyin, f.traditional && f.traditional !== p.word ? f.traditional : ''].filter(Boolean).join(' · ');
-  } else {
-    if (p.gender && p.plural)                               sub = `Pl. ${p.plural}`;
-    else if (p.pos === 'verb' && p.forms?.past)             sub = `${p.forms.past} · ${p.forms.participle||''}`;
-    else if (p.pos === 'adjective' && p.forms?.comparative) sub = `${p.forms.comparative} · ${p.forms.superlative||''}`;
-  }
+  const sub = getLang().previewSub(p);
   document.getElementById('previewPlural').textContent = sub;
 
   // Visual Swap: German more prominent
@@ -2376,16 +2597,7 @@ function addToDeck() {
   const p = getParsed();
   if (!p.word) return;
 
-  const _addLang = getLang();
-  let formsStr = '';
-  if (_addLang.code === 'zh') {
-    const f = p.forms || {};
-    formsStr = [f.pinyin, f.measure_word ? `量词: ${f.measure_word}` : '', f.traditional && f.traditional !== p.word ? `繁: ${f.traditional}` : ''].filter(Boolean).join(' · ');
-  } else {
-    if (p.pos === 'noun' && p.plural) formsStr = `Pl. ${p.plural}`;
-    else if (p.pos === 'verb' && p.forms?.past) formsStr = [p.forms.past, p.forms.participle, p.forms.auxiliary ? `(${p.forms.auxiliary})` : ''].filter(Boolean).join(' · ');
-    else if (p.pos === 'adjective' && p.forms?.comparative) formsStr = [p.forms.comparative, p.forms.superlative].filter(Boolean).join(' · ');
-  }
+  const formsStr = getLang().formsStr(p);
 
   const cardData = {
     word:         p.word,
@@ -2460,7 +2672,7 @@ function renderDeck() {
     div.innerHTML = `
       <div class="deck-item-row" onclick="editCard(${card.id})">
         ${card.imageUrl ? `<img class="deck-item-img" src="${card.imageUrl}">` : '<div class="deck-item-img"></div>'}
-        <div class="deck-item-word"><span class="deck-item-article ${card.gender}">${card.gender || ''}</span>${card.word}</div>
+        <div class="deck-item-word"><span class="deck-item-article" style="color:${getLang().articleColors[card.gender]||''}">${card.gender || ''}</span>${card.word}</div>
         <button class="deck-item-remove" onclick="event.stopPropagation();removeFromDeck(${card.id})">✕</button>
       </div>`;
     el.appendChild(div);
@@ -2551,9 +2763,7 @@ async function exportApkg() {
         .card{font-family:Helvetica;text-align:center;background:#1a1a1a;color:#f0e8d8}
         .back{padding:16px;display:flex;flex-direction:column;min-height:200px}
         .word{font-size:36px;font-family:Georgia}
-        .article.der{color:#e05c5c}
-        .article.die{color:#5ca8e0}
-        .article.das{color:#5ce09a}
+        ${Object.entries(lang.articleColors).map(([k,v])=>`.article.${k}{color:${v}}`).join('\n        ')}
         .pos{font-size:10px;color:#777;text-transform:uppercase}
         .forms{font-style:italic;color:#aaa;font-size:13px}
         .audio-row{margin-top:20px;display:flex;justify-content:center;width:100%;padding-top:12px}
