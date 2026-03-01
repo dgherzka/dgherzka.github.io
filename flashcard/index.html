@@ -2245,7 +2245,11 @@ function openExternalSearch(sel) {
     getty:      `https://www.gettyimages.com/photos/${encodeURIComponent(q.replace(/\s+/g, '-'))}`,
     unsplash:   `https://unsplash.com/s/photos/${encodeURIComponent(q.replace(/\s+/g, '-'))}`,
   };
-  if (urls[sel.value]) window.open(urls[sel.value], '_blank');
+  if (urls[sel.value]) {
+    const a = document.createElement('a');
+    a.href = urls[sel.value]; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
   sel.value = '';
 }
 
