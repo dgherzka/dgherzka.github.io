@@ -2230,9 +2230,14 @@ async function useImageUrl() {
   updatePreview();
 }
 
+let _browseCloseHandler = null;
+function closeBrowseDropdown() {
+  document.getElementById('browseDropdown').style.display = 'none';
+  if (_browseCloseHandler) { document.removeEventListener('click', _browseCloseHandler); _browseCloseHandler = null; }
+}
 function toggleBrowseDropdown() {
   const dd = document.getElementById('browseDropdown');
-  if (dd.style.display !== 'none') { dd.style.display = 'none'; return; }
+  if (dd.style.display !== 'none') { closeBrowseDropdown(); return; }
   const q = document.getElementById('imageQuery').value.trim();
   const lang = document.getElementById('imageLang').value;
   const providers = [
@@ -2244,12 +2249,13 @@ function toggleBrowseDropdown() {
   ];
   const linkStyle = 'display:block;padding:8px 12px;color:var(--text);text-decoration:none;font-size:0.85rem;white-space:nowrap';
   dd.innerHTML = providers.map(([name, url]) =>
-    `<a href="${url}" target="_blank" rel="noopener" style="${linkStyle}" onclick="document.getElementById('browseDropdown').style.display='none'">${name} ↗</a>`
+    `<a href="${url}" target="_blank" rel="noopener" style="${linkStyle}" onclick="closeBrowseDropdown()">${name} ↗</a>`
   ).join('');
   dd.style.display = 'block';
-  setTimeout(() => document.addEventListener('click', function close(e) {
-    if (!dd.contains(e.target)) { dd.style.display = 'none'; document.removeEventListener('click', close); }
-  }), 0);
+  setTimeout(() => {
+    _browseCloseHandler = e => { if (!dd.contains(e.target)) closeBrowseDropdown(); };
+    document.addEventListener('click', _browseCloseHandler);
+  }, 0);
 }
 
 function clearImage() {
