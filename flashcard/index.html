@@ -1210,7 +1210,7 @@ Return ONLY a JSON object (no markdown). The "word" field must be the bare lemma
   }
 }`,
     defNativePrompt: (word, article, rawQuery, queryHint, style) =>
-      `Gib eine sehr kurze deutsche Definition (max. 10 Wörter) für "${article}${word}".${queryHint} ${style} Nur der Definitionstext, keine Einleitung.`,
+      `Gib eine sehr kurze deutsche Definition (max. 10 Wörter) für "${article}${word}".${queryHint} Nur der Definitionstext, ein einziger Satz, keine Einleitung, keine zusätzlichen Erklärungen.`,
     sentencePrompt: (word, gender, qHint, randomHint, prefix) =>
       `Create ONE short, natural German example sentence using the word "${gender ? gender + ' ' : ''}${word}".${qHint} ${randomHint} Reply in exactly this format:\n${prefix}: <German sentence>\nEN: <English translation>`,
     translatePrompt: (word, gender, en, prefix) =>
@@ -1552,7 +1552,8 @@ const IMAGE_PROVIDERS = [
   { id: 'pixabay',  label: 'Pixabay',  storageKey: 'wk_pixabay',  keyLabel: 'Pixabay API Key',    keyUrl: 'https://pixabay.com/api/docs',                 placeholder: 'Enter Pixabay key…',         fn: _pixabaySearch  },
   { id: 'flickr',   label: 'Flickr',   storageKey: 'wk_flickr',   keyLabel: 'Flickr API Key',      keyUrl: 'https://www.flickr.com/services/apps/create/', placeholder: 'Enter Flickr key…',          fn: _flickrSearch   },
   { id: 'unsplash', label: 'Unsplash', storageKey: 'wk_unsplash', keyLabel: 'Unsplash Access Key', keyUrl: 'https://unsplash.com/developers',               placeholder: 'Enter Unsplash access key…', fn: _unsplashSearch },
-  { id: 'pexels',   label: 'Pexels',   storageKey: 'wk_pexels',   keyLabel: 'Pexels API Key',      keyUrl: 'https://www.pexels.com/api/',                  placeholder: 'Enter Pexels key…',          fn: _pexelsSearch   },
+  { id: 'pexels',      label: 'Pexels',      storageKey: 'wk_pexels',      keyLabel: 'Pexels API Key',      keyUrl: 'https://www.pexels.com/api/',  placeholder: 'Enter Pexels key…',  fn: _pexelsSearch      },
+  { id: 'stockcake',   label: 'Stockcake',   storageKey: 'wk_stockcake',   noKey: true,                                                                                                fn: _stockcakeSearch   },
   // Freepik omitted: their API does not set CORS headers, so browser-side fetch is blocked.
   // A server-side proxy would be required to use it here.
 ];
@@ -1566,7 +1567,7 @@ function getKeys() {
     anthropic:    localStorage.getItem('wk_anthropic') || '',
     imageProvider: localStorage.getItem('wk_image_provider') || 'pixabay',
   };
-  IMAGE_PROVIDERS.forEach(p => { k[p.id] = localStorage.getItem(p.storageKey) || ''; });
+  IMAGE_PROVIDERS.forEach(p => { k[p.id] = p.noKey ? 'public' : (localStorage.getItem(p.storageKey) || ''); });
   return k;
 }
 function getImageProvider() { const el = document.getElementById('imageProvider'); return el ? el.value : (localStorage.getItem('wk_image_provider') || 'pixabay'); }
@@ -1800,7 +1801,7 @@ async function generateDefinitions(pArg) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 120,
-        messages: [{ role: 'user', content: `Give a very concise English dictionary definition (1-5 words) for the ${lang.name} word "${article}${word}".${queryHint} ${style} Return ONLY the definition text, no preamble, no word repetition.` }]
+        messages: [{ role: 'user', content: `Give the English translation equivalent for the ${lang.name} word "${article}${word}", as it would appear in a bilingual dictionary entry (e.g. "neighbor", "run", "happy").${queryHint} Return ONLY the translation word or short phrase, no definitions, no preamble, no word repetition.` }]
       })
     });
     const dataEN = await resEN.json();
@@ -1824,7 +1825,7 @@ async function generateDefinitions(pArg) {
       })
     });
     const dataDE = await resDE.json();
-    const defDE = dataDE.content?.[0]?.text?.trim();
+    const defDE = (dataDE.content?.[0]?.text?.trim() || '').split('\n')[0].trim();
     if (defDE) document.getElementById('definitionDEInput').value = defDE;
 
   } catch(e) {}
@@ -1845,8 +1846,10 @@ function updateImageSectionUI() {
   const container = document.getElementById('imgKeyFields');
   if (!container.querySelector('input')) {
     container.innerHTML = IMAGE_PROVIDERS.map(p =>
-      `<label>${p.keyLabel} <a href="${p.keyUrl}" target="_blank">Get Key ↗</a></label>` +
-      `<input id="key_${p.id}" type="text" placeholder="${p.placeholder}" />`
+      p.noKey
+        ? `<input id="key_${p.id}" type="hidden" />`
+        : `<label>${p.keyLabel} <a href="${p.keyUrl}" target="_blank">Get Key ↗</a></label>` +
+          `<input id="key_${p.id}" type="text" placeholder="${p.placeholder}" />`
     ).join('\n');
   }
 
@@ -2057,6 +2060,34 @@ async function _pexelsSearch(word, k, grid, status, page, append) {
   } catch(e) { _imgError(grid, `Pexels error: ${e.message}`); }
 }
 
+// Stockcake (no API key required)
+async function _stockcakeSearch(word, k, grid, status, page, append) {
+  if (!append) _imgLoading(grid, 'Searching Stockcake…');
+  try {
+    const lang = document.getElementById('imageLang').value;
+    const params = new URLSearchParams({ keyword: word, locale: lang, page: String(page), size: '12' });
+    const targetUrl = `https://stockcake.com/api/search-typesense?${params}`;
+    const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`);
+    if (!res.ok) { _imgError(grid, `Stockcake error: ${res.status}`); return; }
+    const data = await res.json();
+    const hits = data.results || [];
+    if (!hits.length) {
+      if (!append) grid.innerHTML = `<div style="grid-column:1/-1;color:var(--muted);font-size:0.85rem;">No images found. Try a different word.</div>`;
+      _imgLoadMoreBtn(false);
+      return;
+    }
+    if (!append) grid.innerHTML = '';
+    hits.forEach(hit => {
+      const div = document.createElement('div');
+      div.className = 'image-thumb';
+      div.innerHTML = `<img src="${hit.small_image}" loading="lazy" alt="${hit.short_title || ''}" /><div class="check">✓</div>`;
+      div.onclick = () => selectImage(div, hit.large_image || hit.medium_image, hit.small_image);
+      grid.appendChild(div);
+    });
+    _imgLoadMoreBtn(hits.length === 12);
+  } catch(e) { _imgError(grid, `Stockcake error: ${e.message}`); }
+}
+
 // Freepik
 async function _freepikSearch(word, k, grid, status, page, append) {
   if (!k.freepik) { toast('Add your Freepik key in ⚙ API Keys.', 'error'); return; }
@@ -2246,6 +2277,7 @@ function toggleBrowseDropdown() {
     ['Adobe Stock',   `https://stock.adobe.com/search?k=${encodeURIComponent(q)}&search_type=usertyped`],
     ['Getty Images',  `https://www.gettyimages.com/photos/${encodeURIComponent(q.replace(/\s+/g, '-'))}`],
     ['Unsplash',      `https://unsplash.com/s/photos/${encodeURIComponent(q.replace(/\s+/g, '-'))}`],
+    ['Stockcake',     `https://stockcake.com/s/?q=${encodeURIComponent(q)}`],
   ];
   // In PWA standalone mode, navigate in-place so the user can long-press copy images
   // and swipe back to return. In browser mode, open a new tab.
