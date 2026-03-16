@@ -1078,6 +1078,9 @@
     <label>Anthropic API Key <a href="https://console.anthropic.com/settings/keys" target="_blank">Get Key ↗</a></label>
     <input id="keyAnthropic" type="text" placeholder="sk-ant-…" />
 
+    <label>CORS Proxy URL <span style="color:var(--muted);font-size:0.8em;">(leave blank for default)</span></label>
+    <input id="keyCorsProxy" type="text" placeholder="https://corsproxy.io/?url=" />
+
     <div class="modal-footer" style="justify-content:space-between;">
       <button class="btn" style="color:var(--der);border-color:var(--der);opacity:0.7;" onclick="clearStorage()">Clear all data</button>
       <div style="display:flex;gap:8px;">
@@ -1612,6 +1615,11 @@ function getKeys() {
   IMAGE_PROVIDERS.forEach(p => { k[p.id] = p.noKey ? 'public' : (localStorage.getItem(p.storageKey) || ''); });
   return k;
 }
+function corsProxy(url) {
+  const base = localStorage.getItem('wk_cors_proxy') || 'https://corsproxy.io/?url=';
+  return base + encodeURIComponent(url);
+}
+
 function getImageProvider() { const el = document.getElementById('imageProvider'); return el ? el.value : (localStorage.getItem('wk_image_provider') || 'pixabay'); }
 
 function openSettings() {
@@ -1621,6 +1629,7 @@ function openSettings() {
   document.getElementById('keyOpenaiImage').value = k.openai_image;
   document.getElementById('keyGemini').value = k.gemini;
   document.getElementById('keyAnthropic').value = k.anthropic;
+  document.getElementById('keyCorsProxy').value = localStorage.getItem('wk_cors_proxy') || '';
   document.getElementById('settingsModal').classList.add('open');
 }
 function closeSettings() {
@@ -1632,6 +1641,7 @@ function saveSettings() {
   localStorage.setItem('wk_openai_image', document.getElementById('keyOpenaiImage').value.trim());
   localStorage.setItem('wk_gemini', document.getElementById('keyGemini').value.trim());
   localStorage.setItem('wk_anthropic', document.getElementById('keyAnthropic').value.trim());
+  localStorage.setItem('wk_cors_proxy', document.getElementById('keyCorsProxy').value.trim());
   closeSettings();
   updateApiStatus();
   updateImageSectionUI();
@@ -2109,7 +2119,7 @@ async function _stockcakeSearch(word, k, grid, status, page, append) {
     const lang = document.getElementById('imageLang').value;
     const params = new URLSearchParams({ keyword: word, locale: lang, page: String(page), size: '12' });
     const targetUrl = `https://stockcake.com/api/search-typesense?${params}`;
-    const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`);
+    const res = await fetch(corsProxy(targetUrl));
     if (!res.ok) { _imgError(grid, `Stockcake error: ${res.status}`); return; }
     const data = await res.json();
     const hits = data.results || [];
@@ -2138,7 +2148,7 @@ async function _freepikSearch(word, k, grid, status, page, append) {
     const lang = document.getElementById('imageLang').value;
     const locale = `${lang}-${lang.toUpperCase()}`;
     const targetUrl = `https://api.freepik.com/v1/resources?term=${encodeURIComponent(word)}&page=${page}&limit=12&filters[content_type][photo]=1`;
-    const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`, {
+    const res = await fetch(corsProxy(targetUrl), {
       headers: { 'x-freepik-api-key': k.freepik, 'Accept-Language': locale }
     });
     if (!res.ok) { _imgError(grid, `Freepik error: ${res.status}`); return; }
@@ -2278,7 +2288,7 @@ function handleImagePaste(event) {
 async function resolveImagePageUrl(url) {
   if (/\.(jpe?g|png|gif|webp|svg|avif)(\?.*)?$/i.test(url)) return url;
   try {
-    const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(corsProxy(url), { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return url;
     const html = await res.text();
     const match = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
