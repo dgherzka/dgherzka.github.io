@@ -1554,8 +1554,7 @@ const IMAGE_PROVIDERS = [
   { id: 'unsplash', label: 'Unsplash', storageKey: 'wk_unsplash', keyLabel: 'Unsplash Access Key', keyUrl: 'https://unsplash.com/developers',               placeholder: 'Enter Unsplash access key…', fn: _unsplashSearch },
   { id: 'pexels',      label: 'Pexels',      storageKey: 'wk_pexels',      keyLabel: 'Pexels API Key',      keyUrl: 'https://www.pexels.com/api/',  placeholder: 'Enter Pexels key…',  fn: _pexelsSearch      },
   { id: 'stockcake',   label: 'Stockcake',   storageKey: 'wk_stockcake',   noKey: true,                                                                                                fn: _stockcakeSearch   },
-  // Freepik omitted: their API does not set CORS headers, so browser-side fetch is blocked.
-  // A server-side proxy would be required to use it here.
+  { id: 'freepik',     label: 'Freepik',     storageKey: 'wk_freepik',     keyLabel: 'Freepik API Key',     keyUrl: 'https://developers.freepik.com/my-apps',  placeholder: 'Enter Freepik key…', fn: _freepikSearch     },
 ];
 
 // ── Keys ──
@@ -2095,7 +2094,8 @@ async function _freepikSearch(word, k, grid, status, page, append) {
   try {
     const lang = document.getElementById('imageLang').value;
     const locale = `${lang}-${lang.toUpperCase()}`;
-    const res = await fetch(`https://api.freepik.com/v1/resources?term=${encodeURIComponent(word)}&page=${page}&limit=12&filters[content_type][photo]=1`, {
+    const targetUrl = `https://api.freepik.com/v1/resources?term=${encodeURIComponent(word)}&page=${page}&limit=12&filters[content_type][photo]=1`;
+    const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`, {
       headers: { 'x-freepik-api-key': k.freepik, 'Accept-Language': locale }
     });
     if (!res.ok) { _imgError(grid, `Freepik error: ${res.status}`); return; }
