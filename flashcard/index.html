@@ -1080,6 +1080,7 @@
     <div class="modal-footer" style="justify-content:space-between;">
       <button class="btn" style="color:var(--der);border-color:var(--der);opacity:0.7;" onclick="clearStorage()">Clear all data</button>
       <div style="display:flex;gap:8px;">
+        <button class="btn" onclick="copyKeysLink()" title="Copy a URL with your API keys pre-filled">Copy link with keys</button>
         <button class="btn" onclick="closeSettings()">Cancel</button>
         <button class="btn btn-primary" onclick="saveSettings()">Save</button>
       </div>
@@ -1097,18 +1098,40 @@ let deck = [];
 // ── Convenience URL Parameter Support ──
 function checkUrlParams() {
   const params = new URLSearchParams(window.location.search);
-  const pixabay = params.get('pixabay') || params.get('pixabay_key');
-  const anthropic = params.get('anthropic') || params.get('anthropic_key');
-
-  if (pixabay) localStorage.setItem('wk_pixabay', pixabay);
-  if (anthropic) localStorage.setItem('wk_anthropic', anthropic);
-
-  if (pixabay || anthropic) {
+  const keyMap = [
+    ...IMAGE_PROVIDERS.filter(p => !p.noKey).map(p => ({ param: p.id, storageKey: p.storageKey })),
+    { param: 'replicate',    storageKey: 'wk_replicate'    },
+    { param: 'openai_image', storageKey: 'wk_openai_image' },
+    { param: 'gemini',       storageKey: 'wk_gemini'       },
+    { param: 'anthropic',    storageKey: 'wk_anthropic'    },
+  ];
+  let imported = false;
+  keyMap.forEach(({ param, storageKey }) => {
+    const val = params.get(param);
+    if (val) { localStorage.setItem(storageKey, val); imported = true; }
+  });
+  if (imported) {
     // Clean URL without refreshing to prevent key leakage in share screenshots
-    const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
-    window.history.replaceState({path: cleanUrl}, '', cleanUrl);
+    const cleanUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+    window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
     toast('API keys imported from URL', 'success');
   }
+}
+
+function copyKeysLink() {
+  const k = getKeys();
+  const params = new URLSearchParams();
+  IMAGE_PROVIDERS.filter(p => !p.noKey).forEach(p => { if (k[p.id]) params.set(p.id, k[p.id]); });
+  if (k.replicate)    params.set('replicate',    k.replicate);
+  if (k.openai_image) params.set('openai_image', k.openai_image);
+  if (k.gemini)       params.set('gemini',        k.gemini);
+  if (k.anthropic)    params.set('anthropic',     k.anthropic);
+  if (!params.toString()) { toast('No API keys saved yet.', 'error'); return; }
+  const url = window.location.protocol + '//' + window.location.host + window.location.pathname + '?' + params.toString();
+  navigator.clipboard.writeText(url).then(
+    () => toast('Link copied — share carefully, it contains your API keys.', 'success'),
+    () => { prompt('Copy this link (contains your API keys):', url); }
+  );
 }
 
 function emptyDeck() {
