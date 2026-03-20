@@ -748,6 +748,44 @@
     flex-wrap: wrap;
   }
 
+  /* ── Queue Bar ── */
+  .queue-bar {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+  }
+  .queue-bar.active { display: flex; }
+  .queue-word {
+    flex: 1;
+    color: var(--accent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .queue-pos { color: var(--muted); }
+
+  /* ── Queue Modal Textarea ── */
+  .modal textarea {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    padding: 10px 12px;
+    margin-bottom: 16px;
+    resize: vertical;
+    min-height: 260px;
+    line-height: 1.7;
+    transition: border-color 0.2s ease;
+  }
+  .modal textarea:focus { outline: none; border-color: var(--accent); }
+
   .mobile-deck-actions { display: none; }
 
   /* ── Responsive Design ── */
@@ -889,6 +927,15 @@
     <div class="action-bar">
       <button class="btn btn-primary" onclick="searchAll()" id="searchBtn">Go</button>
       <button class="btn" onclick="clearCard()">Clear</button>
+      <button class="btn" onclick="openQueueModal()">Queue</button>
+    </div>
+
+    <!-- Queue progress bar -->
+    <div class="queue-bar" id="queueBar">
+      <span class="queue-pos" id="queuePos"></span>
+      <span class="queue-word" id="queueWord"></span>
+      <button class="btn btn-sm" onclick="nextInQueue()">Next →</button>
+      <button class="btn btn-sm" onclick="clearQueue()" title="Clear queue" style="padding:5px 8px;">✕</button>
     </div>
 
     <hr class="divider" />
@@ -1092,6 +1139,21 @@
   </div>
 </div>
 
+<!-- ── Queue Modal ── -->
+<div class="modal-backdrop" id="queueModal" onclick="if(event.target===this)closeQueueModal()">
+  <div class="modal" style="width:560px;">
+    <h2>Word Queue</h2>
+    <p>One word or phrase per line. Each will be loaded and searched in turn.</p>
+    <label>Words</label>
+    <textarea id="queueTextarea" placeholder="der Hund&#10;laufen&#10;schön&#10;…" oninput="updateQueueCount()"></textarea>
+    <div class="modal-footer">
+      <span id="queueCount" style="flex:1;color:var(--muted);font-family:var(--font-mono);font-size:0.8rem;align-self:center;"></span>
+      <button class="btn" onclick="closeQueueModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="loadQueue()">Load Queue</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── iOS Install Instructions Modal ── -->
 <div class="modal-backdrop" id="iosInstallModal" onclick="if(event.target===this)this.style.display='none'">
   <div class="modal" style="max-width:320px;text-align:center;">
@@ -1115,6 +1177,8 @@
 <script>
 // ── State ──
 let deck = [];
+let queue = [];
+let queueIndex = -1;
 
 // ── Convenience URL Parameter Support ──
 function checkUrlParams() {
@@ -1646,6 +1710,58 @@ function saveSettings() {
   updateApiStatus();
   updateImageSectionUI();
   toast('API keys saved!', 'success');
+}
+
+// ── Queue ──
+function openQueueModal() {
+  if (queue.length > 0) {
+    document.getElementById('queueTextarea').value = queue.join('\n');
+  }
+  updateQueueCount();
+  document.getElementById('queueModal').classList.add('open');
+  setTimeout(() => document.getElementById('queueTextarea').focus(), 50);
+}
+function closeQueueModal() {
+  document.getElementById('queueModal').classList.remove('open');
+}
+function updateQueueCount() {
+  const lines = document.getElementById('queueTextarea').value.split('\n').map(s => s.trim()).filter(Boolean);
+  const el = document.getElementById('queueCount');
+  el.textContent = lines.length ? `${lines.length} word${lines.length !== 1 ? 's' : ''}` : '';
+}
+function loadQueue() {
+  const lines = document.getElementById('queueTextarea').value.split('\n').map(s => s.trim()).filter(Boolean);
+  if (!lines.length) { toast('No words entered.', 'error'); return; }
+  queue = lines;
+  queueIndex = 0;
+  closeQueueModal();
+  loadQueueItem();
+}
+function loadQueueItem() {
+  document.getElementById('entryInput').value = queue[queueIndex];
+  updateQueueBar();
+  searchAll();
+}
+function nextInQueue() {
+  queueIndex++;
+  if (queueIndex < queue.length) {
+    loadQueueItem();
+  } else {
+    clearQueue();
+    toast('Queue complete!', 'success');
+  }
+}
+function clearQueue() {
+  queue = [];
+  queueIndex = -1;
+  updateQueueBar();
+}
+function updateQueueBar() {
+  const bar = document.getElementById('queueBar');
+  if (!queue.length) { bar.classList.remove('active'); return; }
+  bar.classList.add('active');
+  document.getElementById('queuePos').textContent = `${queueIndex + 1} / ${queue.length}`;
+  document.getElementById('queueWord').textContent = queue[queueIndex] || '';
 }
 
 function updateApiStatus() {
@@ -2720,6 +2836,7 @@ function addToDeck() {
   } else {
     deck.push({ ...cardData, id: Date.now() });
     clearCard();
+    if (queue.length > 0 && queueIndex >= 0) nextInQueue();
   }
   saveDeck();
   renderDeck();
