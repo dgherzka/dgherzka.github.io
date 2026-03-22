@@ -1144,6 +1144,13 @@
   <div class="modal" style="width:560px;">
     <h2>Word Queue</h2>
     <p>One word or phrase per line. Each will be loaded and searched in turn.</p>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <span style="color:var(--muted);font-family:var(--font-mono);font-size:0.82rem;">Top 2500 German words, lines</span>
+      <input id="queueRangeStart" type="number" min="1" max="2500" value="1" style="width:64px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 8px;font-family:var(--font-mono);font-size:0.82rem;" />
+      <span style="color:var(--muted);font-family:var(--font-mono);font-size:0.82rem;">–</span>
+      <input id="queueRangeEnd" type="number" min="1" max="2500" value="50" style="width:64px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 8px;font-family:var(--font-mono);font-size:0.82rem;" />
+      <button class="btn btn-sm" onclick="loadWordRange()">Load</button>
+    </div>
     <label>Words</label>
     <textarea id="queueTextarea" placeholder="der Hund&#10;laufen&#10;schön&#10;…" oninput="updateQueueCount()"></textarea>
     <div class="modal-footer">
@@ -1728,6 +1735,21 @@ function updateQueueCount() {
   const lines = document.getElementById('queueTextarea').value.split('\n').map(s => s.trim()).filter(Boolean);
   const el = document.getElementById('queueCount');
   el.textContent = lines.length ? `${lines.length} word${lines.length !== 1 ? 's' : ''}` : '';
+}
+async function loadWordRange() {
+  const start = Math.max(1, parseInt(document.getElementById('queueRangeStart').value) || 1);
+  const end = Math.min(2500, parseInt(document.getElementById('queueRangeEnd').value) || 50);
+  if (start > end) { toast('Start must be ≤ end.', 'error'); return; }
+  try {
+    const res = await fetch('/flashcard/german_words.txt');
+    const text = await res.text();
+    const allLines = text.split('\n').map(s => s.trim()).filter(Boolean);
+    const slice = allLines.slice(start - 1, end);
+    document.getElementById('queueTextarea').value = slice.join('\n');
+    updateQueueCount();
+  } catch (e) {
+    toast('Failed to load word list.', 'error');
+  }
 }
 function loadQueue() {
   const lines = document.getElementById('queueTextarea').value.split('\n').map(s => s.trim()).filter(Boolean);
