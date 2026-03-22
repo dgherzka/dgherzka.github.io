@@ -1662,14 +1662,14 @@ Return ONLY a JSON object (no markdown). The "word" field must be in standard wr
       `Translate this English sentence into natural Japanese, and the translation must use the word "${word}" (or an inflected form of it).\n\nEnglish: "${en}"\n\nIf the sentence can be naturally translated using that word, reply with exactly:\n${prefix}: <Japanese translation>\n\nIf it cannot be naturally translated using "${word}", reply with exactly:\nERROR: <brief reason>`,
     formsStr: p => {
       const f = p.forms || {};
-      if (p.pos === 'verb') return [f.masu_form, f.te_form].filter(Boolean).join(' · ');
-      if (p.pos === 'adjective' && f.adj_type) return f.adj_type === 'na' ? 'な-adjective' : 'い-adjective';
-      return f.reading || '';
+      const reading = [f.reading, f.romaji].filter(Boolean).join(' · ');
+      if (p.pos === 'verb') return [reading, f.masu_form, f.te_form].filter(Boolean).join(' · ');
+      if (p.pos === 'adjective' && f.adj_type) return [reading, f.adj_type === 'na' ? 'な-adjective' : 'い-adjective'].filter(Boolean).join(' · ');
+      return reading;
     },
     previewSub: p => {
       const f = p.forms || {};
-      if (f.reading) return f.reading;
-      return '';
+      return [f.reading, f.romaji].filter(Boolean).join(' · ');
     },
     renderChipsBody: (p, chip, chipW) => {
       const pos = p.pos || '';
@@ -3097,7 +3097,7 @@ async function exportApkg() {
           <div class='article {{Article}}'>{{Article}}</div>
           <div class='word'>{{Word}}</div>
           <div class='pos'>{{Part_of_Speech}}</div>
-          <div class='forms'>{{Forms}}</div>
+          <div class='forms blur-reveal' onclick="this.classList.toggle('revealed')">{{Forms}}</div>
           <div class='definition-de'>{{${lang.ankiNativeDefField}}}</div>
           <div class='definition blur-reveal' onclick="this.classList.toggle('revealed')">{{Definition_EN}}</div>
           <hr>
