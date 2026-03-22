@@ -1618,6 +1618,73 @@ Return ONLY a JSON object (no markdown). The "word" field must be in Hebrew scri
       return html;
     },
   },
+  ja: {
+    name: 'Japanese', code: 'ja', ttsLocale: 'ja-JP',
+    wiktionarySection: 'Japanese',
+    linguaLibreId: 'Q5287', linguaLibreLang: 'jpn', audioPrefix: 'Ja', audioCodes: ['ja'],
+    linguaLibreSpeakers: [],
+    articles: [], articleColors: {},
+    sentencePrefix: 'JA', translationLang: 'English',
+    imageLangCode: 'ja', imageLangOptions: [{value:'ja',label:'JA'},{value:'en',label:'EN'}],
+    inputPlaceholder: '犬 · いぬ · dog …',
+    defNativePlaceholder: 'Japanese definition…', sentNativePlaceholder: 'Japanese sentence…',
+    ankiDeckName: 'Japanese Vocab',
+    ankiNativeSentenceField: 'Sentence_JA', ankiNativeDefField: 'Definition_JA',
+    parsePrompt: query => `You are helping build a Japanese flashcard. Interpret the user's query and identify the intended Japanese vocabulary item. The query could be:
+- A Japanese word in kanji, kana, or romaji (e.g. "犬", "いぬ", "inu", "食べる")
+- An English word or phrase to translate into Japanese — marked with hints like "(en)", "(English)", "English word for...", etc.
+- A description or clue (e.g. "the Japanese word for dog")
+
+Return ONLY a JSON object (no markdown). The "word" field must be in standard written Japanese (kanji where natural).
+
+"${query}"
+
+{
+  "word": "<Japanese word in kanji/kana, dictionary/plain form>",
+  "pos": "<noun|verb|adjective|adverb|particle|conjunction|other>",
+  "gender": "",
+  "plural": "",
+  "commonness": <integer 1–10, where 1 is extremely rare and 10 is extremely common in everyday Japanese>,
+  "forms": {
+    "reading": "<full hiragana reading of the word>",
+    "romaji": "<Hepburn romanization of the word>",
+    "te_form": "<て-form, verbs only, else empty string>",
+    "ta_form": "<past plain form (た-form), verbs only, else empty string>",
+    "masu_form": "<polite present ます-form, verbs only, else empty string>",
+    "adj_type": "<i|na, adjectives only, else empty string>"
+  }
+}`,
+    defNativePrompt: (word, article, rawQuery, queryHint, style) =>
+      `「${word}」の意味を10語以内の簡潔な日本語で説明してください。${rawQuery && rawQuery !== word ? `ユーザーの元のクエリは「${rawQuery}」です。` : ''} 説明文のみ返してください。`,
+    sentencePrompt: (word, gender, qHint, randomHint, prefix) =>
+      `Create ONE short, natural Japanese example sentence using the word "${word}".${qHint} ${randomHint} Reply in exactly this format:\n${prefix}: <Japanese sentence>\nEN: <English translation>`,
+    translatePrompt: (word, gender, en, prefix) =>
+      `Translate this English sentence into natural Japanese, and the translation must use the word "${word}" (or an inflected form of it).\n\nEnglish: "${en}"\n\nIf the sentence can be naturally translated using that word, reply with exactly:\n${prefix}: <Japanese translation>\n\nIf it cannot be naturally translated using "${word}", reply with exactly:\nERROR: <brief reason>`,
+    formsStr: p => {
+      const f = p.forms || {};
+      if (p.pos === 'verb') return [f.masu_form, f.te_form].filter(Boolean).join(' · ');
+      if (p.pos === 'adjective' && f.adj_type) return f.adj_type === 'na' ? 'な-adjective' : 'い-adjective';
+      return f.reading || '';
+    },
+    previewSub: p => {
+      const f = p.forms || {};
+      if (f.reading) return f.reading;
+      return '';
+    },
+    renderChipsBody: (p, chip, chipW) => {
+      const pos = p.pos || '';
+      let html = '';
+      if (p.forms?.reading) html += chip('chip-ja-reading', 'reading', p.forms.reading);
+      if (p.forms?.romaji) html += chip('chip-ja-romaji', 'romaji', p.forms.romaji);
+      if (pos === 'verb') {
+        html += chip('chip-ja-masu', 'ます-form', p.forms?.masu_form);
+        html += chip('chip-ja-te', 'て-form', p.forms?.te_form);
+        html += chip('chip-ja-ta', 'past', p.forms?.ta_form);
+      }
+      if (pos === 'adjective' && p.forms?.adj_type) html += chip('chip-ja-adjtype', 'type', p.forms.adj_type === 'na' ? 'な' : 'い');
+      return html;
+    },
+  },
 };
 
 function getLang() {
@@ -1879,6 +1946,13 @@ function getParsed() {
       root:           chipVal('chip-root')        || (parsedWord.forms?.root           || ''),
       past3ms:        chipVal('chip-past3ms')     || (parsedWord.forms?.past3ms        || ''),
       transliteration: chipVal('chip-translit')   || (parsedWord.forms?.transliteration || ''),
+      // Japanese
+      reading:        chipVal('chip-ja-reading')  || (parsedWord.forms?.reading        || ''),
+      romaji:         chipVal('chip-ja-romaji')   || (parsedWord.forms?.romaji         || ''),
+      masu_form:      chipVal('chip-ja-masu')     || (parsedWord.forms?.masu_form      || ''),
+      te_form:        chipVal('chip-ja-te')       || (parsedWord.forms?.te_form        || ''),
+      ta_form:        chipVal('chip-ja-ta')       || (parsedWord.forms?.ta_form        || ''),
+      adj_type:       chipVal('chip-ja-adjtype')  || (parsedWord.forms?.adj_type       || ''),
     }
   };
 }
