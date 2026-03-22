@@ -919,7 +919,13 @@
         placeholder="Hund · der Hund · laufen · dog …"
         autocomplete="off" spellcheck="false"
         onkeydown="if(event.key==='Enter') searchAll()" />
-      <div class="parsed-tags" id="parsedTags"></div>
+      <!-- Queue progress bar -->
+      <div class="queue-bar" id="queueBar">
+        <span class="queue-pos" id="queuePos"></span>
+        <span class="queue-word" id="queueWord"></span>
+        <button class="btn btn-sm" onclick="nextInQueue()">Next →</button>
+        <button class="btn btn-sm" onclick="clearQueue()" title="Clear queue" style="padding:5px 8px;">✕</button>
+      </div>
     </div>
 
     <div class="action-bar">
@@ -928,13 +934,9 @@
       <button class="btn" onclick="openQueueModal()">Queue</button>
     </div>
 
-    <!-- Queue progress bar -->
-    <div class="queue-bar" id="queueBar">
-      <span class="queue-pos" id="queuePos"></span>
-      <span class="queue-word" id="queueWord"></span>
-      <button class="btn btn-sm" onclick="nextInQueue()">Next →</button>
-      <button class="btn btn-sm" onclick="clearQueue()" title="Clear queue" style="padding:5px 8px;">✕</button>
-    </div>
+    <hr class="divider" />
+
+    <div class="parsed-tags" id="parsedTags"></div>
 
     <hr class="divider" />
 
@@ -1790,7 +1792,6 @@ function restoreQueueState() {
       queueIndex = qi;
       document.getElementById('entryInput').value = queue[queueIndex];
       updateQueueBar();
-      searchAll();
     }
   } catch (e) {}
 }
@@ -1806,7 +1807,6 @@ function loadQueue() {
 function loadQueueItem() {
   document.getElementById('entryInput').value = queue[queueIndex];
   updateQueueBar();
-  searchAll();
 }
 function nextInQueue() {
   queueIndex++;
@@ -2811,7 +2811,7 @@ function loadEditorState() {
     const raw = localStorage.getItem(`wk_editor_${getLang().code}`) || localStorage.getItem('wk_editor');
     if (!raw) return;
     const s = JSON.parse(raw);
-    if (s.entry) document.getElementById('entryInput').value = s.entry;
+    if (s.entry && queueIndex < 0) document.getElementById('entryInput').value = s.entry;
     if (s.parsed?.word) { parsedWord = s.parsed; renderChips(s.parsed); }
     if (s.sentDE)   document.getElementById('sentDE').value = s.sentDE;
     if (s.sentEN)   document.getElementById('sentEN').value = s.sentEN;
