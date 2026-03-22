@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Wortschatzkartenschmiede</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<link rel="manifest" href="/flashcard/manifest.json">
+<link rel="manifest" href="/wks/manifest.json">
 <link rel="apple-touch-icon" href="/favicon.svg">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1743,7 +1743,7 @@ function updateQueueCount() {
 let _freqWords = null;
 async function getFreqWords() {
   if (_freqWords) return _freqWords;
-  const res = await fetch('/flashcard/german_words.txt');
+  const res = await fetch('/wks/german_words.txt');
   const text = await res.text();
   _freqWords = text.split('\n').map(s => s.trim()).filter(Boolean);
   const totalEl = document.getElementById('queueRangeTotal');

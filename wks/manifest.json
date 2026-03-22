@@ -1,7 +1,7 @@
 {
   "name": "Wortschatzkartenschmiede",
   "short_name": "Wortschatzkartenschmiede",
-  "start_url": "/flashcard/",
+  "start_url": "/wks/",
   "display": "standalone",
   "background_color": "#121212",
   "theme_color": "#121212",
