@@ -1777,11 +1777,29 @@ async function shiftWordRange(dir) {
     toast('Failed to load word list.', 'error');
   }
 }
+function saveQueueState() {
+  localStorage.setItem('queue', JSON.stringify(queue));
+  localStorage.setItem('queueIndex', queueIndex);
+}
+function restoreQueueState() {
+  try {
+    const q = JSON.parse(localStorage.getItem('queue') || '[]');
+    const qi = parseInt(localStorage.getItem('queueIndex') ?? '-1');
+    if (q.length && qi >= 0 && qi < q.length) {
+      queue = q;
+      queueIndex = qi;
+      document.getElementById('entryInput').value = queue[queueIndex];
+      updateQueueBar();
+      searchAll();
+    }
+  } catch (e) {}
+}
 function loadQueue() {
   const lines = document.getElementById('queueTextarea').value.split('\n').map(s => s.trim()).filter(Boolean);
   if (!lines.length) { toast('No words entered.', 'error'); return; }
   queue = lines;
   queueIndex = 0;
+  saveQueueState();
   closeQueueModal();
   loadQueueItem();
 }
@@ -1793,6 +1811,7 @@ function loadQueueItem() {
 function nextInQueue() {
   queueIndex++;
   if (queueIndex < queue.length) {
+    saveQueueState();
     loadQueueItem();
   } else {
     clearQueue();
@@ -1802,6 +1821,7 @@ function nextInQueue() {
 function clearQueue() {
   queue = [];
   queueIndex = -1;
+  saveQueueState();
   updateQueueBar();
 }
 function updateQueueBar() {
@@ -3104,6 +3124,7 @@ function toast(msg, type='') {
 checkUrlParams();
 loadDeck();
 renderDeck();
+restoreQueueState();
 updateApiStatus();
 updateImageSectionUI();
 loadEditorState();
