@@ -139,7 +139,8 @@
 
   .parsed-tags {
     display: none;
-    flex-direction: column;
+    flex-direction: row;
+    flex-wrap: wrap;
     gap: 6px;
     margin-top: 8px;
     align-items: flex-start;
@@ -168,8 +169,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 4px 9px;
-    flex-shrink: 0;
-    max-width: 100%;
+    flex: 1;
     min-width: 0;
   }
   .parsed-chip label {
@@ -1146,9 +1146,9 @@
     <p>One word or phrase per line. Each will be loaded and searched in turn.</p>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
       <span style="color:var(--muted);font-family:var(--font-mono);font-size:0.82rem;">Top 2500 German words, lines</span>
-      <input id="queueRangeStart" type="number" min="1" max="2500" value="1" style="width:64px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 8px;font-family:var(--font-mono);font-size:0.82rem;" />
+      <input id="queueRangeStart" type="number" min="1" max="2500" value="1" style="width:80px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 8px;font-family:var(--font-mono);font-size:0.82rem;" />
       <span style="color:var(--muted);font-family:var(--font-mono);font-size:0.82rem;">–</span>
-      <input id="queueRangeEnd" type="number" min="1" max="2500" value="50" style="width:64px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 8px;font-family:var(--font-mono);font-size:0.82rem;" />
+      <input id="queueRangeEnd" type="number" min="1" max="2500" value="50" style="width:80px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 8px;font-family:var(--font-mono);font-size:0.82rem;" />
       <button class="btn btn-sm" onclick="loadWordRange()">Load</button>
     </div>
     <label>Words</label>
