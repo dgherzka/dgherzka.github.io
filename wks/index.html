@@ -947,8 +947,8 @@
         <button class="btn btn-sm" onclick="generateDefinitions()" id="defBtn">Generate</button>
       </div>
       <div class="sentence-box">
-        <textarea class="sentence-edit" id="definitionDEInput" placeholder="German definition…" style="color:var(--text);font-size:0.95rem;min-height:36px;"></textarea>
-        <textarea class="sentence-en-edit" id="definitionInput" placeholder="English definition…" style="color:var(--muted);font-size:0.85rem;min-height:36px;"></textarea>
+        <textarea class="sentence-edit" id="definitionDEInput" placeholder="German definition…" style="color:var(--text);font-size:0.95rem;min-height:36px;" oninput="updatePreview()"></textarea>
+        <textarea class="sentence-en-edit" id="definitionInput" placeholder="English definition…" style="color:var(--muted);font-size:0.85rem;min-height:36px;" oninput="updatePreview()"></textarea>
       </div>
     </div>
 
@@ -1013,8 +1013,8 @@
         </div>
       </div>
       <div class="sentence-box">
-        <textarea class="sentence-edit" id="sentDE" placeholder="German sentence…"></textarea>
-        <textarea class="sentence-en-edit" id="sentEN" placeholder="English translation…"></textarea>
+        <textarea class="sentence-edit" id="sentDE" placeholder="German sentence…" oninput="updatePreview()"></textarea>
+        <textarea class="sentence-en-edit" id="sentEN" placeholder="English translation…" oninput="updatePreview()"></textarea>
       </div>
       <div class="feedback-box" id="feedbackBox"></div>
     </div>
@@ -2137,6 +2137,7 @@ async function generateDefinitions(pArg) {
     const dataDE = await resDE.json();
     const defDE = (dataDE.content?.[0]?.text?.trim() || '').split('\n')[0].trim();
     if (defDE) document.getElementById('definitionDEInput').value = defDE;
+    updatePreview();
 
   } catch(e) {}
   if (btn) { btn.innerHTML = 'Generate'; btn.disabled = false; }
@@ -2886,12 +2887,12 @@ function loadEditorState() {
     if (!raw) return;
     const s = JSON.parse(raw);
     if (s.entry && queueIndex < 0) document.getElementById('entryInput').value = s.entry;
-    if (s.parsed?.word) { parsedWord = s.parsed; renderChips(s.parsed); }
     if (s.sentDE)   document.getElementById('sentDE').value = s.sentDE;
     if (s.sentEN)   document.getElementById('sentEN').value = s.sentEN;
     if (s.defEN)    document.getElementById('definitionInput').value = s.defEN;
     if (s.defDE)    document.getElementById('definitionDEInput').value = s.defDE;
     if (s.imgQuery) document.getElementById('imageQuery').value = s.imgQuery;
+    if (s.parsed?.word) { parsedWord = s.parsed; renderChips(s.parsed); }
     if (s.image)  { selectedImage = s.image; document.getElementById('imgClearBtn').style.display = ''; }
     if (s.audio)    selectedAudio = s.audio;
   } catch(e) {}
