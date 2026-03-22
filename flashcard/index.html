@@ -1144,9 +1144,9 @@
     <p>One word or phrase per line. Each will be loaded and searched in turn.</p>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
       <span style="color:var(--muted);font-family:var(--font-mono);font-size:0.82rem;">Lines</span>
-      <input id="queueRangeStart" type="number" min="1" value="1" style="width:80px;height:29px;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:0 8px;font-family:var(--font-mono);font-size:0.82rem;" />
+      <input id="queueRangeStart" type="text" inputmode="numeric" pattern="[0-9]*" value="1" style="width:80px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;font-family:var(--font-mono);font-size:0.85rem;" />
       <span style="color:var(--muted);font-family:var(--font-mono);font-size:0.82rem;">–</span>
-      <input id="queueRangeEnd" type="number" min="1" value="50" style="width:80px;height:29px;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:0 8px;font-family:var(--font-mono);font-size:0.82rem;" />
+      <input id="queueRangeEnd" type="text" inputmode="numeric" pattern="[0-9]*" value="50" style="width:80px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;font-family:var(--font-mono);font-size:0.85rem;" />
       <span id="queueRangeTotal" style="color:var(--muted);font-family:var(--font-mono);font-size:0.82rem;"></span>
       <button class="btn btn-sm" onclick="shiftWordRange(-1)">←</button>
       <button class="btn btn-sm" onclick="shiftWordRange(1)">→</button>
@@ -1748,8 +1748,6 @@ async function getFreqWords() {
   if (totalEl) totalEl.textContent = `of ${_freqWords.length}`;
   const s = document.getElementById('queueRangeStart');
   const e = document.getElementById('queueRangeEnd');
-  if (s) s.max = _freqWords.length;
-  if (e) e.max = _freqWords.length;
   return _freqWords;
 }
 async function loadWordRange() {
