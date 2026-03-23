@@ -456,6 +456,11 @@
     font-style: italic;
     margin-bottom: 8px;
   }
+  .card-vowels {
+    font-size: 13px;
+    color: #aaaaaa;
+    margin-bottom: 8px;
+  }
   .card-divider { border: none; border-top: 1px solid #333333; margin: 10px 0; width: 100%; }
   .card-sentence { font-size: 15px; color: #f0e8d8; line-height: 1.6; margin: 10px 0 4px; text-align: center; }
 
@@ -1056,6 +1061,9 @@
             <div class="card-article" id="previewArticle"></div>
             <div class="card-word" id="previewWord"></div>
             <div class="card-plural" id="previewPlural"></div>
+            <div class="card-vowels blur-reveal" id="previewVowels"
+              onmousedown="handleRevealStart(this)" onmouseup="handleRevealEnd(this)"
+              ontouchstart="handleRevealStart(this)" ontouchend="handleRevealEnd(this)"></div>
 
             <div class="card-definition-primary" id="previewDefinitionDE"></div>
             <div class="card-definition-secondary blur-reveal" id="previewDefinitionEN"
@@ -1582,7 +1590,8 @@ Return ONLY a JSON object (no markdown). The "word" field must be in Hebrew scri
   "forms": {
     "root": "<3-letter shoresh root, verbs only, else empty string>",
     "past3ms": "<past tense 3rd person masculine singular, verbs only, else empty string>",
-    "transliteration": "<simple Latin transliteration of the word>"
+    "transliteration": "<simple Latin transliteration of the word>",
+    "vowels": "<word with nikud vowel marks added, or empty string>"
   }
 }`,
     defNativePrompt: (word, article, rawQuery, queryHint, style) =>
@@ -1617,6 +1626,7 @@ Return ONLY a JSON object (no markdown). The "word" field must be in Hebrew scri
         html += chip('chip-past3ms', 'past 3ms', p.forms?.past3ms);
       }
       if (p.forms?.transliteration) html += chip('chip-translit', 'translit.', p.forms.transliteration);
+      if (p.forms?.vowels) html += chip('chip-vowels', 'vowels', p.forms.vowels);
       return html;
     },
   },
@@ -1948,6 +1958,7 @@ function getParsed() {
       root:           chipVal('chip-root')        || (parsedWord.forms?.root           || ''),
       past3ms:        chipVal('chip-past3ms')     || (parsedWord.forms?.past3ms        || ''),
       transliteration: chipVal('chip-translit')   || (parsedWord.forms?.transliteration || ''),
+      vowels:         chipVal('chip-vowels')      || (parsedWord.forms?.vowels         || ''),
       // Japanese
       reading:        chipVal('chip-ja-reading')  || (parsedWord.forms?.reading        || ''),
       romaji:         chipVal('chip-ja-romaji')   || (parsedWord.forms?.romaji         || ''),
@@ -2918,6 +2929,16 @@ function updatePreview() {
 
   const sub = getLang().previewSub(p);
   document.getElementById('previewPlural').textContent = sub;
+
+  // Hebrew vowels (blurred)
+  const vowelsEl = document.getElementById('previewVowels');
+  if (getLang().code === 'he' && p.forms?.vowels) {
+    vowelsEl.textContent = p.forms.vowels;
+    vowelsEl.style.display = 'block';
+    vowelsEl.classList.remove('revealed');
+  } else {
+    vowelsEl.style.display = 'none';
+  }
 
   // Visual Swap: German more prominent
   document.getElementById('previewDefinitionDE').textContent = defDE;
