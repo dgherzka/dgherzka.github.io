@@ -801,19 +801,27 @@
 
   /* ── Responsive Design ── */
   @media (max-width: 950px) {
+    body {
+      height: auto;
+      overflow: auto;
+    }
     .app {
       grid-template-columns: 1fr;
       display: flex;
       flex-direction: column;
       height: auto;
+      width: 100%;
     }
     .left-panel {
       max-height: none;
       border-right: none;
       border-bottom: 1px solid var(--border);
+      width: 100%;
     }
     .right-panel {
-      overflow: visible;
+      overflow-y: auto;
+      max-height: none;
+      width: 100%;
     }
     .desktop-deck-actions { display: none; }
     .mobile-deck-actions {
