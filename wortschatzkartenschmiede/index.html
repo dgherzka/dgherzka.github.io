@@ -1772,6 +1772,81 @@ Return ONLY a JSON object (no markdown). The "word" field must be in Arabic scri
       return html;
     },
   },
+  bar: {
+    name: 'Bavarian', code: 'bar', disabled: true, ttsLocale: 'de-DE',
+    wiktionarySection: 'Bavarian',
+    linguaLibreId: 'Q29540', linguaLibreLang: 'bar', audioPrefix: 'Bar', audioCodes: ['bar'],
+    linguaLibreSpeakers: [],
+    articles: ['da','de','di'],
+    articleColors: { da:'#e05c5c', de:'#5ca8e0', di:'#5ce09a' },
+    sentencePrefix: 'BAR', translationLang: 'English',
+    imageLangCode: 'de', imageLangOptions: [{value:'de',label:'DE'},{value:'en',label:'EN'}],
+    inputPlaceholder: 'Hund · da Hund · lauffn · dog …',
+    defNativePlaceholder: 'Bavarian definition…', sentNativePlaceholder: 'Bavarian sentence…',
+    ankiDeckName: 'Bavarian Vocab',
+    ankiNativeSentenceField: 'Sentence_BAR', ankiNativeDefField: 'Definition_BAR',
+    parsePrompt: query => `You are helping build a Bavarian flashcard. Interpret the user's query and identify the intended Bavarian vocabulary item. The query could be:
+- A Bavarian word, optionally with its article (e.g. "da Hund", "lauffn", "schö")
+- An English word or phrase to translate into Bavarian — marked with hints like "(en)", "(English)", "English word for...", etc.
+- A description or clue (e.g. "the Bavarian word for dog")
+
+Return ONLY a JSON object (no markdown). The "word" field must be the bare lemma WITHOUT any article prefix.
+
+"${query}"
+
+{
+  "word": "<bare Bavarian lemma, NO article — e.g. 'Hund' not 'da Hund'>",
+  "pos": "<noun|verb|adjective|adverb|preposition|conjunction|other>",
+  "gender": "<da|de|di> (nouns only, else empty string)",
+  "plural": "<plural form, nouns only, else empty string>",
+  "commonness": <integer 1–10, where 1 is extremely rare and 10 is extremely common in everyday Bavarian>,
+  "forms": {
+    "past": "<past tense 1st person singular, verbs only, else empty string>",
+    "participle": "<past participle, verbs only, else empty string>",
+    "auxiliary": "<hom|san, verbs only, else empty string>",
+    "comparative": "<comparative form, adjectives only, else empty string>",
+    "superlative": "<superlative, adjectives only, else empty string>"
+  }
+}`,
+    defNativePrompt: (word, article, rawQuery, queryHint, style) =>
+      `Gib eine kurze deutsche Erklärung (höchstens 10 Wörter) für das bayrische Wort "${article}${word}".${rawQuery && rawQuery !== word ? ` Die ursprüngliche Anfrage des Benutzers war "${rawQuery}" — konzentriere dich auf diese Bedeutung.` : ''} Gib nur den Erklärungstext zurück, keine Einleitung.`,
+    sentencePrompt: (word, gender, qHint, randomHint, prefix) =>
+      `Create ONE short, natural Bavarian example sentence using the word "${gender ? gender + ' ' : ''}${word}".${qHint} ${randomHint} Reply in exactly this format:\n${prefix}: <Bavarian sentence>\nEN: <English translation>`,
+    translatePrompt: (word, gender, en, prefix) =>
+      `Translate this English sentence into natural Bavarian, and the translation must use the word "${gender ? gender + ' ' : ''}${word}" (or an inflected form of it).\n\nEnglish: "${en}"\n\nIf the sentence can be naturally translated using that word, reply with exactly:\n${prefix}: <Bavarian translation>\n\nIf it cannot be naturally translated using "${word}", reply with exactly:\nERROR: <brief reason>`,
+    formsStr: p => {
+      if (p.pos === 'noun' && p.plural) return `Pl. ${p.plural}`;
+      if (p.pos === 'verb' && p.forms?.past) return [p.forms.past, p.forms.participle, p.forms.auxiliary ? `(${p.forms.auxiliary})` : ''].filter(Boolean).join(' · ');
+      if (p.pos === 'adjective' && p.forms?.comparative) return [p.forms.comparative, p.forms.superlative].filter(Boolean).join(' · ');
+      return '';
+    },
+    previewSub: p => {
+      if (p.gender && p.plural)                             return `Pl. ${p.plural}`;
+      if (p.pos === 'verb' && p.forms?.past)                return `${p.forms.past} · ${p.forms.participle||''}`;
+      if (p.pos === 'adjective' && p.forms?.comparative)    return `${p.forms.comparative} · ${p.forms.superlative||''}`;
+      return '';
+    },
+    renderChipsBody: (p, chip, chipW) => {
+      const pos = p.pos || '';
+      const lang = getLang();
+      let html = '';
+      if (pos === 'noun') {
+        const color = lang.articleColors[p.gender] || '';
+        html += `<div class="parsed-chip"><label>article</label><input id="chip-gender" class="gender-inp" value="${p.gender||''}" style="width:${chipW(p.gender||lang.articles[0])}px;color:${color}" oninput="updateGenderChip(this)"></div>`;
+        html += chip('chip-plural', 'plural', p.plural);
+      }
+      if (pos === 'verb') {
+        html += chip('chip-past', 'past', p.forms?.past);
+        html += chip('chip-participle', 'participle', p.forms?.participle);
+        if (p.forms?.auxiliary) html += chip('chip-aux', 'aux', p.forms.auxiliary);
+      }
+      if (pos === 'adjective') {
+        html += chip('chip-comp', 'comp.', p.forms?.comparative);
+        html += chip('chip-superl', 'superl.', p.forms?.superlative);
+      }
+      return html;
+    },
+  },
 };
 
 function getLang() {
@@ -1779,7 +1854,7 @@ function getLang() {
 }
 
 function setLang(code) {
-  if (!LANGUAGES[code]) return;
+  if (!LANGUAGES[code] || LANGUAGES[code].disabled) return;
   const entry = document.getElementById('entryInput');
   if (entry && entry.value.trim()) {
     if (!confirm(`Switch to ${LANGUAGES[code].name}? Your current card editor will be cleared.`)) {
@@ -1813,8 +1888,9 @@ function applyLang() {
   // App lang selector — populate dynamically, then set value
   const appLangSel = el('appLang');
   if (appLangSel) {
-    if (appLangSel.options.length !== Object.keys(LANGUAGES).length) {
-      appLangSel.innerHTML = Object.keys(LANGUAGES).map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join('');
+    const enabledLangs = Object.keys(LANGUAGES).filter(c => !LANGUAGES[c].disabled);
+    if (appLangSel.options.length !== enabledLangs.length) {
+      appLangSel.innerHTML = enabledLangs.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join('');
     }
     appLangSel.value = lang.code;
   }
@@ -2045,6 +2121,12 @@ function getParsed() {
       root:           chipVal('chip-root')        || (parsedWord.forms?.root           || ''),
       transliteration: chipVal('chip-translit')   || (parsedWord.forms?.transliteration || ''),
       vowels:         chipVal('chip-vowels')      || (parsedWord.forms?.vowels         || ''),
+      // Bavarian (same structure as German)
+      past:           chipVal('chip-past')        || (parsedWord.forms?.past           || ''),
+      participle:     chipVal('chip-participle')  || (parsedWord.forms?.participle     || ''),
+      auxiliary:      chipVal('chip-aux')         || (parsedWord.forms?.auxiliary      || ''),
+      comparative:    chipVal('chip-comp')        || (parsedWord.forms?.comparative    || ''),
+      superlative:    chipVal('chip-superl')      || (parsedWord.forms?.superlative    || ''),
     }
   };
 }
