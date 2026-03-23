@@ -37,7 +37,8 @@
     color: var(--text);
     font-family: var(--font-serif);
     font-weight: 400;
-    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
     min-width: 320px;
     line-height: 1.6;
     text-rendering: optimizeLegibility;
@@ -97,7 +98,8 @@
   .app {
     display: grid;
     grid-template-columns: 420px 1fr;
-    min-height: calc(100vh - 60px);
+    align-items: start;
+    height: calc(100vh - 60px);
   }
 
   /* ── Left Panel ── */
@@ -347,19 +349,18 @@
   .right-panel {
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow-y: auto;
+    max-height: calc(100vh - 60px);
   }
 
   /* ── Card Preview (side-by-side) ── */
   .preview-area {
-    flex: 1;
     padding: 24px 32px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 12px;
-    border-bottom: 1px solid var(--border);
     background: radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.03) 0%, transparent 70%);
   }
 
@@ -496,7 +497,7 @@
 
   /* ── Deck Panel ── */
   .deck-panel {
-    height: 280px;
+    flex: 1;
     border-top: 1px solid var(--border);
     display: flex;
     flex-direction: column;
@@ -533,6 +534,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+    min-height: 0;
   }
   .deck-item {
     display: flex;
