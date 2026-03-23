@@ -456,6 +456,12 @@
     font-style: italic;
     margin-bottom: 8px;
   }
+  .card-transliteration {
+    font-size: 13px;
+    color: #aaaaaa;
+    font-style: italic;
+    margin-bottom: 8px;
+  }
   .card-vowels {
     font-size: 13px;
     color: #aaaaaa;
@@ -1061,6 +1067,7 @@
             <div class="card-article" id="previewArticle"></div>
             <div class="card-word" id="previewWord"></div>
             <div class="card-plural" id="previewPlural"></div>
+            <div class="card-transliteration" id="previewTransliteration"></div>
             <div class="card-vowels blur-reveal" id="previewVowels"
               onmousedown="handleRevealStart(this)" onmouseup="handleRevealEnd(this)"
               ontouchstart="handleRevealStart(this)" ontouchend="handleRevealEnd(this)"></div>
@@ -1744,7 +1751,6 @@ Return ONLY a JSON object (no markdown). The "word" field must be in Arabic scri
     },
     previewSub: p => {
       const f = p.forms || {};
-      if (f.transliteration) return f.transliteration;
       if (p.pos === 'noun' && p.plural) return `Pl. ${p.plural}`;
       if (p.pos === 'verb' && f.root) return f.root;
       return '';
@@ -3003,9 +3009,18 @@ function updatePreview() {
   const sub = getLang().previewSub(p);
   document.getElementById('previewPlural').textContent = sub;
 
-  // Hebrew vowels (blurred)
+  // Transliteration (Arabic and Hebrew)
+  const translitEl = document.getElementById('previewTransliteration');
+  if ((getLang().code === 'ar' || getLang().code === 'he') && p.forms?.transliteration) {
+    translitEl.textContent = p.forms.transliteration;
+    translitEl.style.display = 'block';
+  } else {
+    translitEl.style.display = 'none';
+  }
+
+  // Vowels (blurred, for Hebrew and Arabic)
   const vowelsEl = document.getElementById('previewVowels');
-  if (getLang().code === 'he' && p.forms?.vowels) {
+  if ((getLang().code === 'he' || getLang().code === 'ar') && p.forms?.vowels) {
     vowelsEl.textContent = p.forms.vowels;
     vowelsEl.style.display = 'block';
     vowelsEl.classList.remove('revealed');
