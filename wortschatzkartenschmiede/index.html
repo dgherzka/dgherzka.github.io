@@ -1697,6 +1697,75 @@ Return ONLY a JSON object (no markdown). The "word" field must be in standard wr
       return html;
     },
   },
+  ar: {
+    name: 'Arabic', code: 'ar', ttsLocale: 'ar-SA',
+    wiktionarySection: 'Arabic',
+    linguaLibreId: 'Q13955', linguaLibreLang: 'ara', audioPrefix: 'Ar', audioCodes: ['ar'],
+    linguaLibreSpeakers: [],
+    articles: ['ال'],
+    articleColors: { 'ال': '#5ca8e0' },
+    sentencePrefix: 'AR', translationLang: 'English',
+    imageLangCode: 'ar', imageLangOptions: [{value:'ar',label:'AR'},{value:'en',label:'EN'}],
+    inputPlaceholder: 'كلب · kalb · dog …',
+    defNativePlaceholder: 'Arabic definition…', sentNativePlaceholder: 'Arabic sentence…',
+    ankiDeckName: 'Arabic Vocab',
+    ankiNativeSentenceField: 'Sentence_AR', ankiNativeDefField: 'Definition_AR',
+    parsePrompt: query => `You are helping build an Arabic flashcard. Interpret the user's query and identify the intended Arabic vocabulary item. The query could be:
+- An Arabic word (e.g. "كلب", "يركض", "جميل")
+- An English word or phrase to translate into Arabic — marked with hints like "(en)", "(English)", "English word for...", etc.
+- A description or clue (e.g. "the Arabic word for dog")
+
+Return ONLY a JSON object (no markdown). The "word" field must be in Arabic script (unvocalized).
+
+"${query}"
+
+{
+  "word": "<Arabic word, unvocalized, dictionary/singular form>",
+  "pos": "<noun|verb|adjective|adverb|preposition|conjunction|other>",
+  "gender": "<m|f> (nouns only, else empty string)",
+  "plural": "<plural form, nouns only, else empty string>",
+  "commonness": <integer 1–10, where 1 is extremely rare and 10 is extremely common in everyday Arabic>,
+  "forms": {
+    "root": "<3-letter root (جذر), verbs only, else empty string>",
+    "vowels": "<word with diacritical marks (tashkeel) added, or empty string>",
+    "transliteration": "<simple transliteration of the word>"
+  }
+}`,
+    defNativePrompt: (word, article, rawQuery, queryHint, style) =>
+      `أعط تعريفاً قصيراً جداً بالعربية (10 كلمات على الأكثر) للكلمة "${article}${word}".${rawQuery && rawQuery !== word ? ` السؤال الأصلي للمستخدم هو "${rawQuery}" — ركز على هذا المعنى.` : ''} أعد فقط نص التعريف، بدون عنوان.`,
+    sentencePrompt: (word, gender, qHint, randomHint, prefix) =>
+      `Create ONE short, natural Arabic example sentence using the word "${word}".${qHint} ${randomHint} Reply in exactly this format:\n${prefix}: <Arabic sentence>\nEN: <English translation>`,
+    translatePrompt: (word, gender, en, prefix) =>
+      `Translate this English sentence into natural Arabic, and the translation must use the word "${word}" (or an inflected form of it).\n\nEnglish: "${en}"\n\nIf the sentence can be naturally translated using that word, reply with exactly:\n${prefix}: <Arabic translation>\n\nIf it cannot be naturally translated using "${word}", reply with exactly:\nERROR: <brief reason>`,
+    formsStr: p => {
+      if (p.pos === 'noun' && p.plural) return `Pl. ${p.plural}`;
+      if (p.pos === 'verb' && p.forms?.root) return p.forms.root;
+      return '';
+    },
+    previewSub: p => {
+      const f = p.forms || {};
+      if (f.transliteration) return f.transliteration;
+      if (p.pos === 'noun' && p.plural) return `Pl. ${p.plural}`;
+      if (p.pos === 'verb' && f.root) return f.root;
+      return '';
+    },
+    renderChipsBody: (p, chip, chipW) => {
+      const pos = p.pos || '';
+      const lang = getLang();
+      let html = '';
+      if (pos === 'noun') {
+        const color = lang.articleColors[p.gender] || '';
+        html += `<div class="parsed-chip"><label>gender</label><input id="chip-gender" class="gender-inp" value="${p.gender||''}" style="width:${chipW(p.gender||lang.articles[0])}px;color:${color}" oninput="updateGenderChip(this)"></div>`;
+        html += chip('chip-plural', 'plural', p.plural);
+      }
+      if (pos === 'verb') {
+        html += chip('chip-root', 'root', p.forms?.root);
+      }
+      if (p.forms?.transliteration) html += chip('chip-translit', 'translit.', p.forms.transliteration);
+      if (p.forms?.vowels) html += chip('chip-vowels', 'vowels', p.forms.vowels);
+      return html;
+    },
+  },
 };
 
 function getLang() {
@@ -1966,6 +2035,10 @@ function getParsed() {
       te_form:        chipVal('chip-ja-te')       || (parsedWord.forms?.te_form        || ''),
       ta_form:        chipVal('chip-ja-ta')       || (parsedWord.forms?.ta_form        || ''),
       adj_type:       chipVal('chip-ja-adjtype')  || (parsedWord.forms?.adj_type       || ''),
+      // Arabic
+      root:           chipVal('chip-root')        || (parsedWord.forms?.root           || ''),
+      transliteration: chipVal('chip-translit')   || (parsedWord.forms?.transliteration || ''),
+      vowels:         chipVal('chip-vowels')      || (parsedWord.forms?.vowels         || ''),
     }
   };
 }
